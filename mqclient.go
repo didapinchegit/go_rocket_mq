@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -47,7 +46,7 @@ type TopicRouteData struct {
 type MqClient struct {
 	clientId           string
 	conf               *Config
-	brokerAddrTable    map[string]map[string]string //map[topic]map[bokerId]addrs
+	brokerAddrTable    map[string]map[string]string //map[brokerName]map[bokerId]addrs
 	consumerTable      map[string]*DefaultConsumer
 	topicRouteTable    map[string]*TopicRouteData
 	remotingClient     RemotingClient
@@ -77,6 +76,28 @@ func (self *MqClient) findBrokerAddressInSubscribe(brokerName string, brokerId i
 			for id, brokerAddr = range brokerMap {
 				slave = (id != "0")
 				found = true
+				break
+			}
+		}
+	}
+
+	return
+}
+
+func (self *MqClient) findBrokerAddressInAdmin(brokerName string) (addr string, found, slave bool) {
+	found = false
+	slave = false
+	brokers, ok := self.brokerAddrTable[brokerName]
+	if ok {
+		for brokerId, addr := range brokers {
+
+			if addr != "" {
+				found = true
+				if brokerId == "0" {
+					slave = false
+				} else {
+					slave = true
+				}
 				break
 			}
 		}
@@ -162,7 +183,8 @@ func (self *MqClient) getConsumerIdListByGroup(addr string, consumerGroup string
 		return getConsumerListByGroupResponseBody.ConsumerIdList, nil
 	}
 
-	return nil, errors.New(fmt.Sprintf("MQBrokerException:{code:%d,desc:%s}", response.Code, response.remark))
+	log.Print(request.ExtFields)
+	return nil, errors.New("getConsumerIdListByGroup error")
 }
 
 func (self *MqClient) getTopicRouteInfoFromNameServer(topic string, timeoutMillis int64) (*TopicRouteData, error) {
@@ -183,16 +205,19 @@ func (self *MqClient) getTopicRouteInfoFromNameServer(topic string, timeoutMilli
 	if err != nil {
 		return nil, err
 	}
-	topicRouteData := new(TopicRouteData)
-	bodyjson := strings.Replace(string(response.Body), "0:", "\"0\":", -1)
-	bodyjson = strings.Replace(bodyjson, "1:", "\"1\":", -1)
-	err = json.Unmarshal([]byte(bodyjson), topicRouteData)
-	if err != nil {
-		log.Print(err)
-		return nil, err
+	if response.Code == SUCCESS {
+		topicRouteData := new(TopicRouteData)
+		bodyjson := strings.Replace(string(response.Body), "0:", "\"0\":", -1)
+		bodyjson = strings.Replace(bodyjson, "1:", "\"1\":", -1)
+		err = json.Unmarshal([]byte(bodyjson), topicRouteData)
+		if err != nil {
+			log.Print(err)
+			return nil, err
+		}
+		return topicRouteData, nil
+	} else {
+		return nil, errors.New("getTopicRouteInfoFromNameServer error:" + response.remark)
 	}
-
-	return topicRouteData, nil
 
 }
 
@@ -207,7 +232,7 @@ func (self *MqClient) updateTopicRouteInfoFromNameServer() {
 
 func (self *MqClient) updateTopicRouteInfoFromNameServerByTopic(topic string) error {
 	self.mutex.Lock()
-	defer self.mutex.Lock()
+	defer self.mutex.Unlock()
 
 	topicRouteData, err := self.getTopicRouteInfoFromNameServer(topic, 3000*1000)
 	if err != nil {
@@ -396,4 +421,19 @@ func (self *MqClient) queryConsumerOffset(addr string, requestHeader *QueryConsu
 	}
 
 	return 0, errors.New("query offset error")
+}
+
+func (self *MqClient) updateConsumerOffsetOneway(addr string, header *UpdateConsumerOffsetRequestHeader, timeoutMillis int64) {
+
+	currOpaque := atomic.AddInt32(&opaque, 1)
+	remotingCommand := &RemotingCommand{
+		Code:      QUERY_CONSUMER_OFFSET,
+		Language:  "JAVA",
+		Version:   79,
+		Opaque:    currOpaque,
+		Flag:      0,
+		ExtFields: header,
+	}
+
+	self.remotingClient.invokeSync(addr, remotingCommand, timeoutMillis)
 }

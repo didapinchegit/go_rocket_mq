@@ -53,7 +53,6 @@ func (self *DefalutRemotingClient) connect(addr string) (conn net.Conn, err erro
 
 	conn, ok := self.connTables[addr]
 	if !ok {
-		log.Print(addr)
 		conn, err = net.Dial("tcp", addr)
 		if err != nil {
 			log.Print(err)
@@ -61,7 +60,8 @@ func (self *DefalutRemotingClient) connect(addr string) (conn net.Conn, err erro
 		}
 
 		self.connTables[addr] = conn
-		go self.handlerConn(conn)
+		log.Print("connect to:", addr)
+		go self.handlerConn(conn, addr)
 	}
 
 	return conn, nil
@@ -127,17 +127,23 @@ func (self *DefalutRemotingClient) invokeAsync(addr string, request *RemotingCom
 	return nil
 }
 
-func (self *DefalutRemotingClient) handlerConn(conn net.Conn) {
+func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 	b := make([]byte, 1024)
 	var length, headerLength, bodyLength int32
 	var buf = bytes.NewBuffer([]byte{})
 	var header, body []byte
 	var flag int = 0
 	for {
-
 		n, err := conn.Read(b)
 		if err != nil {
-			log.Print(err, conn.RemoteAddr())
+			if err.Error() == "EOF" {
+				log.Print("server close connection:", addr)
+				conn.Close()
+				self.mutex.Lock()
+				delete(self.connTables, addr)
+				self.mutex.Unlock()
+				self.connect(addr)
+			}
 			return
 		}
 

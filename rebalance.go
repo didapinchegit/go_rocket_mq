@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"sort"
+	"sync"
 )
 
 type SubscriptionData struct {
@@ -23,6 +24,7 @@ type Rebalance struct {
 	allocateMessageQueueStrategy AllocateMessageQueueStrategy
 	consumer                     *DefaultConsumer
 	processQueueTable            map[MessageQueue]int32
+	mutex                        sync.Mutex
 }
 
 func NewRebalance() *Rebalance {
@@ -36,6 +38,8 @@ func NewRebalance() *Rebalance {
 }
 
 func (self *Rebalance) doRebalance() {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
 	for topic, _ := range self.subscriptionInner {
 		self.rebalanceByTopic(topic)
 	}
@@ -146,7 +150,7 @@ func (self *Rebalance) updateProcessQueueTableInRebalance(topic string, mqSet []
 			pullRequest := new(PullRequest)
 			pullRequest.consumerGroup = self.groupName
 			pullRequest.messageQueue = mq
-			pullRequest.nextOffset = 0 //self.computePullFromWhere(mq)
+			pullRequest.nextOffset = self.computePullFromWhere(mq)
 			self.mqClient.pullMessageService.pullRequestQueue <- pullRequest
 			self.processQueueTable[*mq] = 1
 		}
@@ -156,7 +160,7 @@ func (self *Rebalance) updateProcessQueueTableInRebalance(topic string, mqSet []
 
 func (self *Rebalance) computePullFromWhere(mq *MessageQueue) int64 {
 	var result int64 = -1
-	lastOffset := self.consumer.offsetStore.readOffset(mq, "READ_FROM_STORE")
+	lastOffset := self.consumer.offsetStore.readOffset(mq, READ_FROM_STORE)
 	if lastOffset >= 0 {
 		result = lastOffset
 	} else {

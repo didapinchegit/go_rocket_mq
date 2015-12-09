@@ -1,16 +1,22 @@
 package rocketmq
 
+import "fmt"
 import "log"
 import "net"
 import "os"
 import "strconv"
 import "sync/atomic"
+import "time"
 
 const (
-	BrokerSuspendMaxTimeMillis = 1000 * 15
+	BrokerSuspendMaxTimeMillis       = 1000 * 15
+	FLAG_COMMIT_OFFSET         int32 = 0x1 << 0
+	FLAG_SUSPEND               int32 = 0x1 << 1
+	FLAG_SUBSCRIPTION          int32 = 0x1 << 2
+	FLAG_CLASS_FILTER          int32 = 0x1 << 3
 )
 
-type MessageListener func(msgs []*MessageExt)
+type MessageListener func(msgs []*MessageExt) error
 
 type Config struct {
 	Nameserver   string
@@ -66,6 +72,7 @@ func NewDefaultConsumer(name string, conf *Config) (Consumer, error) {
 	offsetStore := new(RemoteOffsetStore)
 	offsetStore.mqClient = mqClient
 	offsetStore.groupName = name
+	offsetStore.offsetTable = make(map[MessageQueue]int64)
 
 	pullMessageService := NewPullMessageService()
 
@@ -133,40 +140,52 @@ func (self *DefaultConsumer) fetchSubscribeMessageQueues(topic string) error {
 
 func (self *DefaultConsumer) pullMessage(pullRequest *PullRequest) {
 
+	commitOffsetEnable := false
+	commitOffsetValue := int64(0)
+
+	commitOffsetValue = self.offsetStore.readOffset(pullRequest.messageQueue, READ_FROM_MEMORY)
+	if commitOffsetValue > 0 {
+		commitOffsetEnable = true
+	}
+
+	var sysFlag int32 = 0
+	if commitOffsetEnable {
+		sysFlag |= FLAG_COMMIT_OFFSET
+	}
+
+	sysFlag |= FLAG_SUSPEND
+
+	subscriptionData, ok := self.rebalance.subscriptionInner[pullRequest.messageQueue.topic]
+	var subVersion int64
+	var subString string
+	if ok {
+		subVersion = subscriptionData.SubVersion
+		subString = subscriptionData.SubString
+
+		sysFlag |= FLAG_SUBSCRIPTION
+	}
+
 	requestHeader := new(PullMessageRequestHeader)
 	requestHeader.ConsumerGroup = pullRequest.consumerGroup
 	requestHeader.Topic = pullRequest.messageQueue.topic
 	requestHeader.QueueId = pullRequest.messageQueue.queueId
 	requestHeader.QueueOffset = pullRequest.nextOffset
 
-	requestHeader.SysFlag = 2
-	requestHeader.CommitOffset = 0
+	requestHeader.SysFlag = sysFlag
+	requestHeader.CommitOffset = commitOffsetValue
 	requestHeader.SuspendTimeoutMillis = BrokerSuspendMaxTimeMillis
-	requestHeader.Subscription = "*"
-
-	subscriptionData, ok := self.rebalance.subscriptionInner[pullRequest.messageQueue.topic]
 
 	if ok {
-		requestHeader.SubVersion = subscriptionData.SubVersion
+		requestHeader.SubVersion = subVersion
+		requestHeader.Subscription = subString
 	}
 
-	currOpaque := atomic.AddInt32(&opaque, 1)
-	remotingCommand := new(RemotingCommand)
-	remotingCommand.Code = PULL_MESSAGE
-	remotingCommand.Opaque = currOpaque
-	remotingCommand.Flag = 0
-	remotingCommand.Language = "JAVA"
-	remotingCommand.Version = 79
-
-	remotingCommand.ExtFields = requestHeader
-
-	brokerAddr, _, found := self.mqClient.findBrokerAddressInSubscribe(pullRequest.messageQueue.brokerName, 0, false)
-
 	pullCallback := func(responseFuture *ResponseFuture) {
-		if responseFuture.responseCommand.Code == 0 && len(responseFuture.responseCommand.Body) > 0 {
-			var nextBeginOffset int64
+		var nextBeginOffset int64 = pullRequest.nextOffset
+		responseCommand := responseFuture.responseCommand
+		if responseCommand.Code == SUCCESS && len(responseCommand.Body) > 0 {
 			var err error
-			pullResult, ok := responseFuture.responseCommand.ExtFields.(map[string]interface{})
+			pullResult, ok := responseCommand.ExtFields.(map[string]interface{})
 			if ok {
 				if nextBeginOffsetInter, ok := pullResult["nextBeginOffset"]; ok {
 					if nextBeginOffsetStr, ok := nextBeginOffsetInter.(string); ok {
@@ -182,20 +201,43 @@ func (self *DefaultConsumer) pullMessage(pullRequest *PullRequest) {
 
 			}
 
-			nextPullRequest := &PullRequest{
-				consumerGroup: pullRequest.consumerGroup,
-				nextOffset:    nextBeginOffset,
-				messageQueue:  pullRequest.messageQueue,
-			}
-
-			self.mqClient.pullMessageService.pullRequestQueue <- nextPullRequest
-
 			msgs := decodeMessage(responseFuture.responseCommand.Body)
-			self.messageListener(msgs)
+			err = self.messageListener(msgs)
+			if err != nil {
+				log.Print(err)
+				//TODO retry
+			} else {
+				self.offsetStore.updateOffset(pullRequest.messageQueue, nextBeginOffset, false)
+			}
+		} else if responseCommand.Code == PULL_NOT_FOUND {
+			time.Sleep(5 * time.Second)
+		} else {
+			log.Print(fmt.Sprintf("pull message error[code:%d,remark:%s]", responseFuture.responseCommand.Code, responseFuture.responseCommand.remark))
+			time.Sleep(5 * time.Second)
 		}
+
+		nextPullRequest := &PullRequest{
+			consumerGroup: pullRequest.consumerGroup,
+			nextOffset:    nextBeginOffset,
+			messageQueue:  pullRequest.messageQueue,
+		}
+
+		self.mqClient.pullMessageService.pullRequestQueue <- nextPullRequest
 	}
 
+	brokerAddr, _, found := self.mqClient.findBrokerAddressInSubscribe(pullRequest.messageQueue.brokerName, 0, false)
+
 	if found {
+		currOpaque := atomic.AddInt32(&opaque, 1)
+		remotingCommand := new(RemotingCommand)
+		remotingCommand.Code = PULL_MESSAGE
+		remotingCommand.Opaque = currOpaque
+		remotingCommand.Flag = 0
+		remotingCommand.Language = "JAVA"
+		remotingCommand.Version = 79
+
+		remotingCommand.ExtFields = requestHeader
+
 		self.remotingClient.invokeAsync(brokerAddr, remotingCommand, 1000, pullCallback)
 	}
 }
