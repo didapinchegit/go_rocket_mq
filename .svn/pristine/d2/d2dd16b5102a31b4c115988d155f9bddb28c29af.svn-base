@@ -183,7 +183,7 @@ func (self *MqClient) getConsumerIdListByGroup(addr string, consumerGroup string
 		return getConsumerListByGroupResponseBody.ConsumerIdList, nil
 	}
 
-	log.Print(response)
+	log.Print(request.ExtFields)
 	return nil, errors.New("getConsumerIdListByGroup error")
 }
 
@@ -344,11 +344,11 @@ func (self *MqClient) sendHeartbeatToAllBrokerWithLock() error {
 
 func (self *MqClient) startScheduledTask() {
 	go func() {
-		updateTopicRouteTimer := time.NewTimer(5 * time.Second)
+		updateTopicRouteTimer := time.NewTimer(10 * time.Second)
 		for {
 			<-updateTopicRouteTimer.C
 			self.updateTopicRouteInfoFromNameServer()
-			updateTopicRouteTimer.Reset(10 * time.Second)
+			updateTopicRouteTimer.Reset(30 * time.Second)
 		}
 	}()
 
@@ -357,16 +357,16 @@ func (self *MqClient) startScheduledTask() {
 		for {
 			<-heartbeatTimer.C
 			self.sendHeartbeatToAllBrokerWithLock()
-			heartbeatTimer.Reset(10 * time.Second)
+			heartbeatTimer.Reset(30 * time.Second)
 		}
 	}()
 
 	go func() {
-		rebalanceTimer := time.NewTimer(15 * time.Second)
+		rebalanceTimer := time.NewTimer(10 * time.Second)
 		for {
 			<-rebalanceTimer.C
 			self.doRebalance()
-			rebalanceTimer.Reset(10 * time.Second)
+			rebalanceTimer.Reset(5 * time.Second)
 		}
 	}()
 }

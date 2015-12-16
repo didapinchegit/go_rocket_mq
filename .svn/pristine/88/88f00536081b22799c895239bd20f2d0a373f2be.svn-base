@@ -1,0 +1,10 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+	ignorecase = true
+	precomposeunicode = true
+[remote "origin"]
+	url = ssh://git@gitlab.didapinche.com:9122/fengbin/go_rocket_mq.git
+	fetch = +refs/heads/*:refs/remotes/origin/*

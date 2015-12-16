@@ -217,34 +217,28 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 			}
 
 			if flag == 0 {
-				headerCopy := make([]byte, len(header))
-				bodyCopy := make([]byte, len(body))
-				copy(headerCopy, header)
-				copy(bodyCopy, body)
-				go func() {
-					cmd := decodeRemoteCommand(headerCopy, bodyCopy)
-					response, ok := self.responseTable[cmd.Opaque]
-					self.mutex.Lock()
-					delete(self.responseTable, cmd.Opaque)
-					self.mutex.Unlock()
+				cmd := decodeRemoteCommand(header, body)
+				response, ok := self.responseTable[cmd.Opaque]
+				self.mutex.Lock()
+				delete(self.responseTable, cmd.Opaque)
+				self.mutex.Unlock()
 
-					if ok {
-						response.responseCommand = cmd
-						if response.invokeCallback != nil {
-							response.invokeCallback(response)
-						}
-
-						if response.done != nil {
-							response.done <- true
-						}
-					} else {
-						jsonCmd, err := json.Marshal(cmd)
-						if err != nil {
-							log.Print(err)
-						}
-						log.Print(string(jsonCmd))
+				if ok {
+					response.responseCommand = cmd
+					if response.invokeCallback != nil {
+						response.invokeCallback(response)
 					}
-				}()
+
+					if response.done != nil {
+						response.done <- true
+					}
+				} else {
+					jsonCmd, err := json.Marshal(cmd)
+					if err != nil {
+						log.Print(err)
+					}
+					log.Print(string(jsonCmd))
+				}
 			}
 		}
 

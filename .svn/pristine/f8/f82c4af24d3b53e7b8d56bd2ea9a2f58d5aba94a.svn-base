@@ -210,10 +210,10 @@ func (self *DefaultConsumer) pullMessage(pullRequest *PullRequest) {
 				self.offsetStore.updateOffset(pullRequest.messageQueue, nextBeginOffset, false)
 			}
 		} else if responseCommand.Code == PULL_NOT_FOUND {
-			time.Sleep(1 * time.Second)
+			time.Sleep(5 * time.Second)
 		} else {
 			log.Print(fmt.Sprintf("pull message error[code:%d,remark:%s]", responseFuture.responseCommand.Code, responseFuture.responseCommand.remark))
-			time.Sleep(1 * time.Second)
+			time.Sleep(5 * time.Second)
 		}
 
 		nextPullRequest := &PullRequest{
