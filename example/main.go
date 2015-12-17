@@ -20,10 +20,11 @@ func main() {
 		log.Panic(err)
 	}
 	consumer.Subscribe("test3", "*")
-	consumer.RegisterMessageListener(func(msgs []*rocketmq.MessageExt) {
+	consumer.RegisterMessageListener(func(msgs []*rocketmq.MessageExt) error {
 		for i, msg := range msgs {
 			log.Print(i, string(msg.Body))
 		}
+		return nil
 	})
 	consumer.Start()
 	time.Sleep(1000 * time.Second)
