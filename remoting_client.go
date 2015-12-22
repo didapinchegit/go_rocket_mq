@@ -238,6 +238,9 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 							response.done <- true
 						}
 					} else {
+						if cmd.Code == NOTIFY_CONSUMER_IDS_CHANGED {
+							return
+						}
 						jsonCmd, err := json.Marshal(cmd)
 						if err != nil {
 							log.Print(err)

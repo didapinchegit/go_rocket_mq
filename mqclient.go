@@ -306,8 +306,8 @@ func (self *MqClient) sendHeartbeatToAllBrokerWithLock() error {
 	}
 
 	for _, brokerTable := range self.brokerAddrTable {
-		for _, addr := range brokerTable {
-			if addr == "" {
+		for brokerId, addr := range brokerTable {
+			if addr == "" || brokerId != "0" {
 				continue
 			}
 			currOpaque := atomic.AddInt32(&opaque, 1)
@@ -330,7 +330,6 @@ func (self *MqClient) sendHeartbeatToAllBrokerWithLock() error {
 				log.Print(err)
 				return err
 			} else {
-
 				if response.Code != 0 {
 					return errors.New("send heartbeat error")
 				} else {
@@ -348,7 +347,7 @@ func (self *MqClient) startScheduledTask() {
 		for {
 			<-updateTopicRouteTimer.C
 			self.updateTopicRouteInfoFromNameServer()
-			updateTopicRouteTimer.Reset(10 * time.Second)
+			updateTopicRouteTimer.Reset(5 * time.Second)
 		}
 	}()
 
@@ -420,6 +419,7 @@ func (self *MqClient) queryConsumerOffset(addr string, requestHeader *QueryConsu
 		}
 	}
 
+	log.Print(reponse)
 	return 0, errors.New("query offset error")
 }
 

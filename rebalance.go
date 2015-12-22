@@ -161,6 +161,7 @@ func (self *Rebalance) updateProcessQueueTableInRebalance(topic string, mqSet []
 func (self *Rebalance) computePullFromWhere(mq *MessageQueue) int64 {
 	var result int64 = -1
 	lastOffset := self.consumer.offsetStore.readOffset(mq, READ_FROM_STORE)
+
 	if lastOffset >= 0 {
 		result = lastOffset
 	} else {
