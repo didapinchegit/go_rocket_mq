@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -207,8 +208,10 @@ func (self *MqClient) getTopicRouteInfoFromNameServer(topic string, timeoutMilli
 	}
 	if response.Code == SUCCESS {
 		topicRouteData := new(TopicRouteData)
-		bodyjson := strings.Replace(string(response.Body), "0:", "\"0\":", -1)
-		bodyjson = strings.Replace(bodyjson, "1:", "\"1\":", -1)
+		bodyjson := strings.Replace(string(response.Body), ",0:", ",\"0\":", -1)
+		bodyjson = strings.Replace(bodyjson, ",1:", ",\"1\":", -1)
+		bodyjson = strings.Replace(bodyjson, "{0:", "{\"0\":", -1)
+		bodyjson = strings.Replace(bodyjson, "{1:", "{\"1\":", -1)
 		err = json.Unmarshal([]byte(bodyjson), topicRouteData)
 		if err != nil {
 			log.Print(err)
@@ -216,7 +219,7 @@ func (self *MqClient) getTopicRouteInfoFromNameServer(topic string, timeoutMilli
 		}
 		return topicRouteData, nil
 	} else {
-		return nil, errors.New("getTopicRouteInfoFromNameServer error:" + response.remark)
+		return nil, errors.New(fmt.Sprintf("get topicRouteInfo from nameServer error[code:%d,topic:%s]", response.Code, topic))
 	}
 
 }
@@ -325,15 +328,13 @@ func (self *MqClient) sendHeartbeatToAllBrokerWithLock() error {
 				return err
 			}
 			remotingCommand.Body = data
+			log.Print("send heartbeat to broker[", addr+"]")
 			response, err := self.remotingClient.invokeSync(addr, remotingCommand, 3000)
 			if err != nil {
 				log.Print(err)
-				return err
 			} else {
-				if response.Code != 0 {
-					return errors.New("send heartbeat error")
-				} else {
-					return nil
+				if response.Code != SUCCESS {
+					log.Print("send heartbeat error")
 				}
 			}
 		}
@@ -356,7 +357,7 @@ func (self *MqClient) startScheduledTask() {
 		for {
 			<-heartbeatTimer.C
 			self.sendHeartbeatToAllBrokerWithLock()
-			heartbeatTimer.Reset(10 * time.Second)
+			heartbeatTimer.Reset(5 * time.Second)
 		}
 	}()
 
@@ -365,7 +366,7 @@ func (self *MqClient) startScheduledTask() {
 		for {
 			<-rebalanceTimer.C
 			self.doRebalance()
-			rebalanceTimer.Reset(10 * time.Second)
+			rebalanceTimer.Reset(30 * time.Second)
 		}
 	}()
 }

@@ -182,61 +182,63 @@ func (self *DefaultConsumer) pullMessage(pullRequest *PullRequest) {
 
 	pullCallback := func(responseFuture *ResponseFuture) {
 		var nextBeginOffset int64 = pullRequest.nextOffset
-		responseCommand := responseFuture.responseCommand
-		if responseCommand.Code == SUCCESS && len(responseCommand.Body) > 0 {
-			var err error
-			pullResult, ok := responseCommand.ExtFields.(map[string]interface{})
-			if ok {
-				if nextBeginOffsetInter, ok := pullResult["nextBeginOffset"]; ok {
-					if nextBeginOffsetStr, ok := nextBeginOffsetInter.(string); ok {
-						nextBeginOffset, err = strconv.ParseInt(nextBeginOffsetStr, 10, 64)
-						if err != nil {
-							log.Print(err)
-							return
+		if responseFuture != nil {
+			responseCommand := responseFuture.responseCommand
+			if responseCommand.Code == SUCCESS && len(responseCommand.Body) > 0 {
+				var err error
+				pullResult, ok := responseCommand.ExtFields.(map[string]interface{})
+				if ok {
+					if nextBeginOffsetInter, ok := pullResult["nextBeginOffset"]; ok {
+						if nextBeginOffsetStr, ok := nextBeginOffsetInter.(string); ok {
+							nextBeginOffset, err = strconv.ParseInt(nextBeginOffsetStr, 10, 64)
+							if err != nil {
+								log.Print(err)
+								return
+							}
+
 						}
 
 					}
 
 				}
 
-			}
+				msgs := decodeMessage(responseFuture.responseCommand.Body)
+				err = self.messageListener(msgs)
+				if err != nil {
+					log.Print(err)
+					//TODO retry
+				} else {
+					self.offsetStore.updateOffset(pullRequest.messageQueue, nextBeginOffset, false)
+				}
+			} else if responseCommand.Code == PULL_NOT_FOUND {
+			} else if responseCommand.Code == PULL_RETRY_IMMEDIATELY || responseCommand.Code == PULL_OFFSET_MOVED {
 
-			msgs := decodeMessage(responseFuture.responseCommand.Body)
-			err = self.messageListener(msgs)
-			if err != nil {
-				log.Print(err)
-				//TODO retry
+				log.Print(pullRequest.messageQueue)
+				log.Print(fmt.Sprintf("pull message error:%v,body:%s", responseCommand, string(responseCommand.Body)))
+				var err error
+				pullResult, ok := responseCommand.ExtFields.(map[string]interface{})
+				if ok {
+					if nextBeginOffsetInter, ok := pullResult["nextBeginOffset"]; ok {
+						if nextBeginOffsetStr, ok := nextBeginOffsetInter.(string); ok {
+							nextBeginOffset, err = strconv.ParseInt(nextBeginOffsetStr, 10, 64)
+							if err != nil {
+								log.Print(err)
+								return
+							}
+
+						}
+
+					}
+
+				}
+
+				//time.Sleep(1 * time.Second)
 			} else {
-				self.offsetStore.updateOffset(pullRequest.messageQueue, nextBeginOffset, false)
+				log.Print(fmt.Sprintf("pull message error:%v,body:%s", responseCommand, string(responseCommand.Body)))
+				log.Print(pullRequest.messageQueue)
+				time.Sleep(1 * time.Second)
 			}
-		} else if responseCommand.Code == PULL_NOT_FOUND {
-			time.Sleep(1 * time.Second)
-		} else if responseCommand.Code == PULL_RETRY_IMMEDIATELY || responseCommand.Code == PULL_OFFSET_MOVED {
-
-			log.Print(pullRequest.messageQueue)
-			log.Print(fmt.Sprintf("pull message error:%v,body:%s", responseCommand, string(responseCommand.Body)))
-			var err error
-			pullResult, ok := responseCommand.ExtFields.(map[string]interface{})
-			if ok {
-				if nextBeginOffsetInter, ok := pullResult["nextBeginOffset"]; ok {
-					if nextBeginOffsetStr, ok := nextBeginOffsetInter.(string); ok {
-						nextBeginOffset, err = strconv.ParseInt(nextBeginOffsetStr, 10, 64)
-						if err != nil {
-							log.Print(err)
-							return
-						}
-
-					}
-
-				}
-
-			}
-
-			//time.Sleep(1 * time.Second)
 		} else {
-			log.Print(fmt.Sprintf("pull message error:%v,body:%s", responseCommand, string(responseCommand.Body)))
-			log.Print(pullRequest.messageQueue)
-			time.Sleep(1 * time.Second)
 		}
 
 		nextPullRequest := &PullRequest{

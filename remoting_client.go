@@ -90,7 +90,11 @@ func (self *DefalutRemotingClient) invokeSync(addr string, request *RemotingComm
 		log.Print(err)
 		return nil, err
 	}
-	<-response.done
+	select {
+	case <-response.done:
+	case <-time.After(3 * time.Second):
+	}
+
 	return response.responseCommand, nil
 }
 
@@ -242,6 +246,7 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 							return
 						}
 						jsonCmd, err := json.Marshal(cmd)
+
 						if err != nil {
 							log.Print(err)
 						}

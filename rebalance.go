@@ -139,6 +139,7 @@ func (self *Rebalance) rebalanceByTopic(topic string) error {
 		return err
 	}
 
+	log.Printf("rebalance topic[%s]", topic)
 	self.updateProcessQueueTableInRebalance(topic, allocateResult)
 	return nil
 }
