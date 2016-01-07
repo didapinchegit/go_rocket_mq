@@ -1,7 +1,7 @@
 # go_rocket_mq
 go rocketmq client
 #import
-import rocketmq "didapinche.com/go_rocket_mq"
+import rocketmq "github.com/didapinchegit/go_rocket_mq"
 
 #example
 	conf := &rocketmq.Config{
