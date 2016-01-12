@@ -333,7 +333,7 @@ func (self *MqClient) sendHeartbeatToAllBrokerWithLock() error {
 			if err != nil {
 				log.Print(err)
 			} else {
-				if response.Code != SUCCESS {
+				if response == nil || response.Code != SUCCESS {
 					log.Print("send heartbeat error")
 				}
 			}
