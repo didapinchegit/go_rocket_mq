@@ -132,7 +132,8 @@ func (self *MqClient) findBrokerAddrByTopic(topic string) (addr string, ok bool)
 func (self *MqClient) findConsumerIdList(topic string, groupName string) ([]string, error) {
 	brokerAddr, ok := self.findBrokerAddrByTopic(topic)
 	if !ok {
-		self.updateTopicRouteInfoFromNameServerByTopic(topic)
+		err := self.updateTopicRouteInfoFromNameServerByTopic(topic)
+		log.Print(err)
 		brokerAddr, ok = self.findBrokerAddrByTopic(topic)
 	}
 
