@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"log"
 	"net"
 	"sync"
@@ -92,10 +93,11 @@ func (self *DefalutRemotingClient) invokeSync(addr string, request *RemotingComm
 	}
 	select {
 	case <-response.done:
+		return response.responseCommand, nil
 	case <-time.After(3 * time.Second):
+		return nil, errors.New("invoke timeout")
 	}
 
-	return response.responseCommand, nil
 }
 
 func (self *DefalutRemotingClient) invokeAsync(addr string, request *RemotingCommand, timeoutMillis int64, invokeCallback InvokeCallback) error {
