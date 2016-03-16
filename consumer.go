@@ -18,6 +18,10 @@ const (
 
 type MessageListener func(msgs []*MessageExt) error
 
+var DEFAULT_IP = GetLocalIp4()
+
+
+
 type Config struct {
 	Nameserver   string
 	ClientIp     string
@@ -60,6 +64,10 @@ func NewDefaultConsumer(name string, conf *Config) (Consumer, error) {
 			Nameserver:   os.Getenv("ROCKETMQ_NAMESVR"),
 			InstanceName: "DEFAULT",
 		}
+	}
+
+	if conf.ClientIp == "" {
+		conf.ClientIp = DEFAULT_IP
 	}
 
 	remotingClient := NewDefaultRemotingClient()

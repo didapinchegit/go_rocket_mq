@@ -12,7 +12,6 @@ func main() {
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
 	conf := &rocketmq.Config{
 		Nameserver:   "192.168.1.234:9876",
-		ClientIp:     "192.168.1.23",
 		InstanceName: "DEFAULT",
 	}
 	consumer, err := rocketmq.NewDefaultConsumer("C_TEST", conf)
