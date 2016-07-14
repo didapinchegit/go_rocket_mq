@@ -70,7 +70,15 @@ func (self *DefalutRemotingClient) connect(addr string) (conn net.Conn, err erro
 
 func (self *DefalutRemotingClient) invokeSync(addr string, request *RemotingCommand, timeoutMillis int64) (*RemotingCommand, error) {
 
-	conn, err := self.connect(addr)
+	conn, ok := self.connTables[addr]
+	var err error
+	if !ok {
+		conn, err = self.connect(addr)
+		if err != nil {
+			log.Print(err)
+			return nil,err
+		}
+	}
 
 	response := &ResponseFuture{
 		sendRequestOK:  false,
@@ -147,6 +155,7 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 			self.mutex.Unlock()
 			log.Print(err, addr)
 			conn.Close()
+
 			return
 		}
 
@@ -266,7 +275,7 @@ func (self *DefalutRemotingClient) sendRequest(header, body []byte, conn net.Con
 	defer self.mutex.Unlock()
 
 	buf := bytes.NewBuffer([]byte{})
-	binary.Write(buf, binary.BigEndian, int32(len(header)+len(body)+4))
+	binary.Write(buf, binary.BigEndian, int32(len(header) + len(body) + 4))
 	binary.Write(buf, binary.BigEndian, int32(len(header)))
 	_, err := conn.Write(buf.Bytes())
 

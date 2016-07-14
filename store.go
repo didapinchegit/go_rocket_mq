@@ -59,7 +59,9 @@ func (self *RemoteOffsetStore) fetchConsumeOffsetFromBroker(mq *MessageQueue) (i
 	brokerAddr, _, found := self.mqClient.findBrokerAddressInSubscribe(mq.brokerName, 0, false)
 
 	if !found {
-		self.mqClient.updateTopicRouteInfoFromNameServerByTopic(mq.topic)
+		if err := self.mqClient.updateTopicRouteInfoFromNameServerByTopic(mq.topic); err != nil {
+			return 0, err
+		}
 		brokerAddr, _, found = self.mqClient.findBrokerAddressInSubscribe(mq.brokerName, 0, false)
 	}
 
@@ -94,7 +96,9 @@ type UpdateConsumerOffsetRequestHeader struct {
 func (self *RemoteOffsetStore) updateConsumeOffsetToBroker(mq *MessageQueue, offset int64) error {
 	addr, found, _ := self.mqClient.findBrokerAddressInSubscribe(mq.brokerName, 0, false)
 	if !found {
-		self.mqClient.updateTopicRouteInfoFromNameServerByTopic(mq.topic)
+		if err := self.mqClient.updateTopicRouteInfoFromNameServerByTopic(mq.topic); err != nil {
+			return err
+		}
 		addr, found, _ = self.mqClient.findBrokerAddressInSubscribe(mq.brokerName, 0, false)
 	}
 
