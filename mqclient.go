@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"github.com/golang/glog"
 	"strconv"
 	"strings"
 	"sync"
@@ -36,6 +36,7 @@ type QueueData struct {
 type BrokerData struct {
 	BrokerName  string
 	BrokerAddrs map[string]string
+	BrokerAddrsLock sync.RWMutex
 }
 
 type TopicRouteData struct {
@@ -48,11 +49,13 @@ type MqClient struct {
 	clientId           string
 	conf               *Config
 	brokerAddrTable    map[string]map[string]string //map[brokerName]map[bokerId]addrs
+	brokerAddrTableLock sync.RWMutex
 	consumerTable      map[string]*DefaultConsumer
+	consumerTableLock sync.RWMutex
 	topicRouteTable    map[string]*TopicRouteData
+	topicRouteTableLock sync.RWMutex
 	remotingClient     RemotingClient
 	pullMessageService *PullMessageService
-	mutex              sync.Mutex
 }
 
 func NewMqClient() *MqClient {
@@ -65,8 +68,9 @@ func NewMqClient() *MqClient {
 func (self *MqClient) findBrokerAddressInSubscribe(brokerName string, brokerId int64, onlyThisBroker bool) (brokerAddr string, slave bool, found bool) {
 	slave = false
 	found = false
-
+	self.brokerAddrTableLock.RLock()
 	brokerMap, ok := self.brokerAddrTable[brokerName]
+	self.brokerAddrTableLock.RUnlock()
 	if ok {
 		brokerAddr, ok = brokerMap[strconv.FormatInt(brokerId, 10)]
 		slave = (brokerId != 0)
@@ -88,7 +92,9 @@ func (self *MqClient) findBrokerAddressInSubscribe(brokerName string, brokerId i
 func (self *MqClient) findBrokerAddressInAdmin(brokerName string) (addr string, found, slave bool) {
 	found = false
 	slave = false
+	self.brokerAddrTableLock.RLock()
 	brokers, ok := self.brokerAddrTable[brokerName]
+	self.brokerAddrTableLock.RUnlock()
 	if ok {
 		for brokerId, addr := range brokers {
 
@@ -108,7 +114,9 @@ func (self *MqClient) findBrokerAddressInAdmin(brokerName string) (addr string, 
 }
 
 func (self *MqClient) findBrokerAddrByTopic(topic string) (addr string, ok bool) {
+	self.topicRouteTableLock.RLock()
 	topicRouteData, ok := self.topicRouteTable[topic]
+	self.topicRouteTableLock.RUnlock()
 	if !ok {
 		return "", ok
 	}
@@ -117,7 +125,9 @@ func (self *MqClient) findBrokerAddrByTopic(topic string) (addr string, ok bool)
 	if brokers != nil && len(brokers) > 0 {
 		brokerData := brokers[0]
 		if ok {
+			brokerData.BrokerAddrsLock.RLock()
 			addr, ok = brokerData.BrokerAddrs["0"]
+			brokerData.BrokerAddrsLock.RUnlock()
 
 			if ok {
 				return
@@ -133,7 +143,7 @@ func (self *MqClient) findConsumerIdList(topic string, groupName string) ([]stri
 	brokerAddr, ok := self.findBrokerAddrByTopic(topic)
 	if !ok {
 		err := self.updateTopicRouteInfoFromNameServerByTopic(topic)
-		log.Print(err)
+		glog.Error(err)
 		brokerAddr, ok = self.findBrokerAddrByTopic(topic)
 	}
 
@@ -169,7 +179,7 @@ func (self *MqClient) getConsumerIdListByGroup(addr string, consumerGroup string
 
 	response, err := self.remotingClient.invokeSync(addr, request, timeoutMillis)
 	if err != nil {
-		log.Print(err)
+		glog.Error(err)
 		return nil, err
 	}
 
@@ -179,13 +189,12 @@ func (self *MqClient) getConsumerIdListByGroup(addr string, consumerGroup string
 		bodyjson = strings.Replace(bodyjson, "1:", "\"1\":", -1)
 		err := json.Unmarshal([]byte(bodyjson), getConsumerListByGroupResponseBody)
 		if err != nil {
-			log.Print(err)
+			glog.Error(err)
 			return nil, err
 		}
 		return getConsumerListByGroupResponseBody.ConsumerIdList, nil
 	}
 
-	log.Print(response)
 	return nil, errors.New("getConsumerIdListByGroup error")
 }
 
@@ -215,7 +224,7 @@ func (self *MqClient) getTopicRouteInfoFromNameServer(topic string, timeoutMilli
 		bodyjson = strings.Replace(bodyjson, "{1:", "{\"1\":", -1)
 		err = json.Unmarshal([]byte(bodyjson), topicRouteData)
 		if err != nil {
-			log.Print(err)
+			glog.Error(err)
 			return nil, err
 		}
 		return topicRouteData, nil
@@ -235,17 +244,17 @@ func (self *MqClient) updateTopicRouteInfoFromNameServer() {
 }
 
 func (self *MqClient) updateTopicRouteInfoFromNameServerByTopic(topic string) error {
-	self.mutex.Lock()
-	defer self.mutex.Unlock()
 
 	topicRouteData, err := self.getTopicRouteInfoFromNameServer(topic, 3000*1000)
 	if err != nil {
-		log.Print(err)
+		glog.Error(err)
 		return err
 	}
 
 	for _, bd := range topicRouteData.BrokerDatas {
+		self.brokerAddrTableLock.Lock()
 		self.brokerAddrTable[bd.BrokerName] = bd.BrokerAddrs
+		self.brokerAddrTableLock.Unlock()
 	}
 
 	mqList := make([]*MessageQueue, 0)
@@ -265,8 +274,9 @@ func (self *MqClient) updateTopicRouteInfoFromNameServerByTopic(topic string) er
 	for _, consumer := range self.consumerTable {
 		consumer.updateTopicSubscribeInfo(topic, mqList)
 	}
-
+	self.topicRouteTableLock.Lock()
 	self.topicRouteTable[topic] = topicRouteData
+	self.topicRouteTableLock.Unlock()
 
 	return nil
 }
@@ -309,6 +319,7 @@ func (self *MqClient) sendHeartbeatToAllBrokerWithLock() error {
 		return errors.New("send heartbeat error")
 	}
 
+	self.brokerAddrTableLock.RLock()
 	for _, brokerTable := range self.brokerAddrTable {
 		for brokerId, addr := range brokerTable {
 			if addr == "" || brokerId != "0" {
@@ -325,21 +336,22 @@ func (self *MqClient) sendHeartbeatToAllBrokerWithLock() error {
 
 			data, err := json.Marshal(*heartbeatData)
 			if err != nil {
-				log.Print(err)
+				glog.Error(err)
 				return err
 			}
 			remotingCommand.Body = data
-			log.Print("send heartbeat to broker[", addr+"]")
+			glog.V(1).Info("send heartbeat to broker[", addr+"]")
 			response, err := self.remotingClient.invokeSync(addr, remotingCommand, 3000)
 			if err != nil {
-				log.Print(err)
+				glog.Error(err)
 			} else {
 				if response == nil || response.Code != SUCCESS {
-					log.Print("send heartbeat error")
+					glog.Error("send heartbeat response  error")
 				}
 			}
 		}
 	}
+	self.brokerAddrTableLock.RUnlock()
 	return nil
 }
 
@@ -403,7 +415,7 @@ func (self *MqClient) queryConsumerOffset(addr string, requestHeader *QueryConsu
 	reponse, err := self.remotingClient.invokeSync(addr, remotingCommand, timeoutMillis)
 
 	if err != nil {
-		log.Print(err)
+		glog.Error(err)
 		return 0, err
 	}
 
@@ -412,7 +424,7 @@ func (self *MqClient) queryConsumerOffset(addr string, requestHeader *QueryConsu
 			if offsetStr, ok := offsetInter.(string); ok {
 				offset, err := strconv.ParseInt(offsetStr, 10, 64)
 				if err != nil {
-					log.Print(err)
+					glog.Error(err)
 					return 0, err
 				}
 				return offset, nil
@@ -421,7 +433,6 @@ func (self *MqClient) queryConsumerOffset(addr string, requestHeader *QueryConsu
 		}
 	}
 
-	log.Print(reponse)
 	return 0, errors.New("query offset error")
 }
 

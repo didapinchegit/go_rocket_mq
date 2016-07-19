@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"log"
+	"github.com/golang/glog"
 	"net"
 	"sync"
 	"time"
@@ -31,37 +31,40 @@ type RemotingClient interface {
 }
 
 type DefalutRemotingClient struct {
-	mutex              sync.Mutex
-	connTables         map[string]net.Conn
+	connTable         map[string]net.Conn
+	connTableLock sync.RWMutex
 	responseTable      map[int32]*ResponseFuture
+	responseTableLock sync.RWMutex
 	namesrvAddrList    []string
 	namesrvAddrChoosed string
 }
 
 func NewDefaultRemotingClient() RemotingClient {
 	return &DefalutRemotingClient{
-		connTables:    make(map[string]net.Conn),
+		connTable:    make(map[string]net.Conn),
 		responseTable: make(map[int32]*ResponseFuture),
 	}
 }
 
 func (self *DefalutRemotingClient) connect(addr string) (conn net.Conn, err error) {
-	self.mutex.Lock()
-	defer self.mutex.Unlock()
 	if addr == "" {
 		addr = self.namesrvAddrChoosed
 	}
 
-	conn, ok := self.connTables[addr]
+	self.connTableLock.RLock()
+	conn, ok := self.connTable[addr]
+	self.connTableLock.RUnlock()
 	if !ok {
 		conn, err = net.Dial("tcp", addr)
 		if err != nil {
-			log.Print(err)
+			glog.Error(err)
 			return nil, err
 		}
 
-		self.connTables[addr] = conn
-		log.Print("connect to:", addr)
+		self.connTableLock.Lock()
+		self.connTable[addr] = conn
+		self.connTableLock.Unlock()
+		glog.Info("connect to:", addr)
 		go self.handlerConn(conn, addr)
 	}
 
@@ -69,13 +72,14 @@ func (self *DefalutRemotingClient) connect(addr string) (conn net.Conn, err erro
 }
 
 func (self *DefalutRemotingClient) invokeSync(addr string, request *RemotingCommand, timeoutMillis int64) (*RemotingCommand, error) {
-
-	conn, ok := self.connTables[addr]
+	self.connTableLock.RLock()
+	conn, ok := self.connTable[addr]
+	self.connTableLock.RUnlock()
 	var err error
 	if !ok {
 		conn, err = self.connect(addr)
 		if err != nil {
-			log.Print(err)
+			glog.Error(err)
 			return nil,err
 		}
 	}
@@ -91,12 +95,12 @@ func (self *DefalutRemotingClient) invokeSync(addr string, request *RemotingComm
 	header := request.encodeHeader()
 	body := request.Body
 
-	self.mutex.Lock()
+	self.responseTableLock.Lock()
 	self.responseTable[request.Opaque] = response
-	self.mutex.Unlock()
+	self.responseTableLock.Unlock()
 	err = self.sendRequest(header, body, conn, addr)
 	if err != nil {
-		log.Print(err)
+		glog.Error(err)
 		return nil, err
 	}
 	select {
@@ -109,12 +113,15 @@ func (self *DefalutRemotingClient) invokeSync(addr string, request *RemotingComm
 }
 
 func (self *DefalutRemotingClient) invokeAsync(addr string, request *RemotingCommand, timeoutMillis int64, invokeCallback InvokeCallback) error {
-	conn, ok := self.connTables[addr]
+	self.connTableLock.RLock()
+	conn, ok := self.connTable[addr]
+	self.connTableLock.RUnlock()
+
 	var err error
 	if !ok {
 		conn, err = self.connect(addr)
 		if err != nil {
-			log.Print(err)
+			glog.Error(err)
 			return err
 		}
 	}
@@ -127,15 +134,15 @@ func (self *DefalutRemotingClient) invokeAsync(addr string, request *RemotingCom
 		invokeCallback: invokeCallback,
 	}
 
-	self.mutex.Lock()
+	self.responseTableLock.Lock()
 	self.responseTable[request.Opaque] = response
-	self.mutex.Unlock()
+	self.responseTableLock.Unlock()
 
 	header := request.encodeHeader()
 	body := request.Body
 	err = self.sendRequest(header, body, conn, addr)
 	if err != nil {
-		log.Print(err)
+		glog.Error(err)
 		return err
 	}
 	return nil
@@ -150,10 +157,10 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 	for {
 		n, err := conn.Read(b)
 		if err != nil {
-			self.mutex.Lock()
-			delete(self.connTables, addr)
-			self.mutex.Unlock()
-			log.Print(err, addr)
+			self.connTableLock.Lock()
+			delete(self.connTable, addr)
+			self.connTableLock.Unlock()
+			glog.Error(err, addr)
 			conn.Close()
 
 			return
@@ -161,10 +168,10 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 
 		_, err = buf.Write(b[:n])
 		if err != nil {
-			self.mutex.Lock()
-			delete(self.connTables, addr)
-			self.mutex.Unlock()
-			log.Print(err, addr)
+			self.connTableLock.Lock()
+			delete(self.connTable, addr)
+			self.connTableLock.Unlock()
+			glog.Error(err, addr)
 			conn.Close()
 			return
 		}
@@ -174,7 +181,7 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 				if buf.Len() >= 4 {
 					err = binary.Read(buf, binary.BigEndian, &length)
 					if err != nil {
-						log.Print(err)
+						glog.Error(err)
 						return
 					}
 					flag = 1
@@ -187,7 +194,7 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 				if buf.Len() >= 4 {
 					err = binary.Read(buf, binary.BigEndian, &headerLength)
 					if err != nil {
-						log.Print(err)
+						glog.Error(err)
 						return
 					}
 					flag = 2
@@ -202,7 +209,7 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 					header = make([]byte, headerLength)
 					_, err = buf.Read(header)
 					if err != nil {
-						log.Print(err)
+						glog.Error(err)
 						return
 					}
 					flag = 3
@@ -221,7 +228,7 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 						body = make([]byte, int(bodyLength))
 						_, err = buf.Read(body)
 						if err != nil {
-							log.Print(err)
+							glog.Error(err)
 							return
 						}
 						flag = 0
@@ -238,10 +245,13 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 				copy(bodyCopy, body)
 				go func() {
 					cmd := decodeRemoteCommand(headerCopy, bodyCopy)
+					self.responseTableLock.RLock()
 					response, ok := self.responseTable[cmd.Opaque]
-					self.mutex.Lock()
+					self.responseTableLock.RUnlock()
+
+					self.responseTableLock.Lock()
 					delete(self.responseTable, cmd.Opaque)
-					self.mutex.Unlock()
+					self.responseTableLock.Unlock()
 
 					if ok {
 						response.responseCommand = cmd
@@ -259,9 +269,9 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 						jsonCmd, err := json.Marshal(cmd)
 
 						if err != nil {
-							log.Print(err)
+							glog.Error(err)
 						}
-						log.Print(string(jsonCmd))
+						glog.Error(string(jsonCmd))
 					}
 				}()
 			}
@@ -271,8 +281,6 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 }
 
 func (self *DefalutRemotingClient) sendRequest(header, body []byte, conn net.Conn, addr string) error {
-	self.mutex.Lock()
-	defer self.mutex.Unlock()
 
 	buf := bytes.NewBuffer([]byte{})
 	binary.Write(buf, binary.BigEndian, int32(len(header) + len(body) + 4))
@@ -281,9 +289,9 @@ func (self *DefalutRemotingClient) sendRequest(header, body []byte, conn net.Con
 
 	if err != nil {
 		conn.Close()
-		self.mutex.Lock()
-		delete(self.connTables, addr)
-		self.mutex.Unlock()
+		self.connTableLock.Lock()
+		delete(self.connTable, addr)
+		self.connTableLock.Unlock()
 		self.connect(addr)
 		return err
 	}
@@ -291,9 +299,9 @@ func (self *DefalutRemotingClient) sendRequest(header, body []byte, conn net.Con
 	_, err = conn.Write(header)
 	if err != nil {
 		conn.Close()
-		self.mutex.Lock()
-		delete(self.connTables, addr)
-		self.mutex.Unlock()
+		self.connTableLock.Lock()
+		delete(self.connTable, addr)
+		self.connTableLock.Unlock()
 		self.connect(addr)
 
 		return err

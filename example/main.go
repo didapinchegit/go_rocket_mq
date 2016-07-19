@@ -2,26 +2,25 @@ package main
 
 import (
 	rocketmq "didapinche.com/go_rocket_mq"
-	"log"
-	"runtime"
+	"github.com/golang/glog"
 	"time"
+	"flag"
 )
 
 func main() {
-	runtime.GOMAXPROCS(runtime.NumCPU())
-	log.SetFlags(log.Lshortfile | log.LstdFlags)
+	flag.Parse()
 	conf := &rocketmq.Config{
 		Nameserver:   "192.168.1.234:9876",
 		InstanceName: "DEFAULT",
 	}
 	consumer, err := rocketmq.NewDefaultConsumer("C_TEST", conf)
 	if err != nil {
-		log.Panic(err)
+		panic(err)
 	}
-	consumer.Subscribe("test", "*")
+	consumer.Subscribe("t_city", "*")
 	consumer.RegisterMessageListener(func(msgs []*rocketmq.MessageExt) error {
 		for i, msg := range msgs {
-			log.Print(i, string(msg.Body))
+			glog.Info(i, string(msg.Body))
 		}
 		return nil
 	})

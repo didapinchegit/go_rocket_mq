@@ -2,7 +2,7 @@ package rocketmq
 
 import (
 	"errors"
-	"log"
+	"github.com/golang/glog"
 	"sort"
 	"sync"
 )
@@ -19,11 +19,14 @@ type Rebalance struct {
 	groupName                    string
 	messageModel                 string
 	topicSubscribeInfoTable      map[string][]*MessageQueue
+	topicSubscribeInfoTableLock sync.RWMutex
 	subscriptionInner            map[string]*SubscriptionData
+	subscriptionInnerLock sync.RWMutex
 	mqClient                     *MqClient
 	allocateMessageQueueStrategy AllocateMessageQueueStrategy
 	consumer                     *DefaultConsumer
 	processQueueTable            map[MessageQueue]int32
+	processQueueTableLock sync.RWMutex
 	mutex                        sync.Mutex
 }
 
@@ -119,7 +122,7 @@ func (self *AllocateMessageQueueAveragely) allocate(consumerGroup string, curren
 func (self *Rebalance) rebalanceByTopic(topic string) error {
 	cidAll, err := self.mqClient.findConsumerIdList(topic, self.groupName)
 	if err != nil {
-		log.Print(err)
+		glog.Error(err)
 		return err
 	}
 
@@ -135,25 +138,29 @@ func (self *Rebalance) rebalanceByTopic(topic string) error {
 	allocateResult, err := self.allocateMessageQueueStrategy.allocate(self.groupName, self.mqClient.clientId, mqs, cidAll)
 
 	if err != nil {
-		log.Print(err)
+		glog.Error(err)
 		return err
 	}
 
-	log.Printf("rebalance topic[%s]", topic)
+	glog.V(1).Infof("rebalance topic[%s]", topic)
 	self.updateProcessQueueTableInRebalance(topic, allocateResult)
 	return nil
 }
 
 func (self *Rebalance) updateProcessQueueTableInRebalance(topic string, mqSet []*MessageQueue) {
 	for _, mq := range mqSet {
+		self.processQueueTableLock.RLock()
 		_, ok := self.processQueueTable[*mq]
+		self.processQueueTableLock.RUnlock()
 		if !ok {
 			pullRequest := new(PullRequest)
 			pullRequest.consumerGroup = self.groupName
 			pullRequest.messageQueue = mq
 			pullRequest.nextOffset = self.computePullFromWhere(mq)
 			self.mqClient.pullMessageService.pullRequestQueue <- pullRequest
+			self.processQueueTableLock.Lock()
 			self.processQueueTable[*mq] = 1
+			self.processQueueTableLock.Unlock()
 		}
 	}
 
