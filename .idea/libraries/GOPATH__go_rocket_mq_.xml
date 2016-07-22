@@ -14,11 +14,29 @@
       <root url="file://$PROJECT_DIR$/../../hbase-test" />
       <root url="file://$PROJECT_DIR$/../../hbase" />
       <root url="file://$PROJECT_DIR$/../../9fans.net" />
+      <root url="file://$PROJECT_DIR$/../../ab" />
       <root url="file://$PROJECT_DIR$/../../code.google.com" />
       <root url="file://$PROJECT_DIR$/../../bitbucket.org" />
     </CLASSES>
     <JAVADOC />
-    <SOURCES />
+    <SOURCES>
+      <root url="file://$PROJECT_DIR$/../../beego_sample" />
+      <root url="file://$PROJECT_DIR$/../../github.com" />
+      <root url="file://$PROJECT_DIR$/../../golang.org" />
+      <root url="file://$PROJECT_DIR$/.." />
+      <root url="file://$PROJECT_DIR$/../../bfs" />
+      <root url="file://$PROJECT_DIR$/../../godoc.org" />
+      <root url="file://$PROJECT_DIR$/../../git.apache.org" />
+      <root url="file://$PROJECT_DIR$/../../rocketmq-tes" />
+      <root url="file://$PROJECT_DIR$/../../gopkg.in" />
+      <root url="file://$PROJECT_DIR$/../../google.golang.org" />
+      <root url="file://$PROJECT_DIR$/../../hbase-test" />
+      <root url="file://$PROJECT_DIR$/../../hbase" />
+      <root url="file://$PROJECT_DIR$/../../9fans.net" />
+      <root url="file://$PROJECT_DIR$/../../ab" />
+      <root url="file://$PROJECT_DIR$/../../code.google.com" />
+      <root url="file://$PROJECT_DIR$/../../bitbucket.org" />
+    </SOURCES>
     <excluded>
       <root url="file://$PROJECT_DIR$" />
     </excluded>
