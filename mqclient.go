@@ -419,6 +419,10 @@ func (self *MqClient) queryConsumerOffset(addr string, requestHeader *QueryConsu
 		return 0, err
 	}
 
+	if reponse.Code == QUERY_NOT_FOUND {
+		return 0,nil
+	}
+
 	if extFields, ok := (reponse.ExtFields).(map[string]interface{}); ok {
 		if offsetInter, ok := extFields["offset"]; ok {
 			if offsetStr, ok := offsetInter.(string); ok {
@@ -432,7 +436,7 @@ func (self *MqClient) queryConsumerOffset(addr string, requestHeader *QueryConsu
 			}
 		}
 	}
-
+	glog.Error(requestHeader,reponse)
 	return 0, errors.New("query offset error")
 }
 

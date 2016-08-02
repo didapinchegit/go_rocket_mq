@@ -220,7 +220,7 @@ func (self *DefaultConsumer) pullMessage(pullRequest *PullRequest) {
 				}
 			} else if responseCommand.Code == PULL_NOT_FOUND {
 			} else if responseCommand.Code == PULL_RETRY_IMMEDIATELY || responseCommand.Code == PULL_OFFSET_MOVED {
-				glog.Error(fmt.Sprintf("pull message error,code=%d", responseCommand.Code))
+				glog.Errorf("pull message error,code=%d,request=%v", responseCommand.Code,requestHeader)
 				var err error
 				pullResult, ok := responseCommand.ExtFields.(map[string]interface{})
 				if ok {
