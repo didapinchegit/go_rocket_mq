@@ -31,10 +31,10 @@ type RemotingClient interface {
 }
 
 type DefalutRemotingClient struct {
-	connTable         map[string]net.Conn
-	connTableLock sync.RWMutex
+	connTable          map[string]net.Conn
+	connTableLock      sync.RWMutex
 	responseTable      map[int32]*ResponseFuture
-	responseTableLock sync.RWMutex
+	responseTableLock  sync.RWMutex
 	namesrvAddrList    []string
 	namesrvAddrChoosed string
 }
@@ -80,7 +80,7 @@ func (self *DefalutRemotingClient) invokeSync(addr string, request *RemotingComm
 		conn, err = self.connect(addr)
 		if err != nil {
 			glog.Error(err)
-			return nil,err
+			return nil, err
 		}
 	}
 
@@ -107,7 +107,7 @@ func (self *DefalutRemotingClient) invokeSync(addr string, request *RemotingComm
 	case <-response.done:
 		return response.responseCommand, nil
 	case <-time.After(3 * time.Second):
-		return nil, errors.New("invoke timeout")
+		return nil, errors.New("invoke sync timeout")
 	}
 
 }
@@ -157,22 +157,15 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 	for {
 		n, err := conn.Read(b)
 		if err != nil {
-			self.connTableLock.Lock()
-			delete(self.connTable, addr)
-			self.connTableLock.Unlock()
+			self.releaseConn(addr,conn)
 			glog.Error(err, addr)
-			conn.Close()
 
 			return
 		}
 
 		_, err = buf.Write(b[:n])
 		if err != nil {
-			self.connTableLock.Lock()
-			delete(self.connTable, addr)
-			self.connTableLock.Unlock()
-			glog.Error(err, addr)
-			conn.Close()
+			self.releaseConn(addr,conn)
 			return
 		}
 
@@ -288,31 +281,30 @@ func (self *DefalutRemotingClient) sendRequest(header, body []byte, conn net.Con
 	_, err := conn.Write(buf.Bytes())
 
 	if err != nil {
-		conn.Close()
-		self.connTableLock.Lock()
-		delete(self.connTable, addr)
-		self.connTableLock.Unlock()
-		self.connect(addr)
+		self.releaseConn(addr,conn)
 		return err
 	}
 
 	_, err = conn.Write(header)
 	if err != nil {
-		conn.Close()
-		self.connTableLock.Lock()
-		delete(self.connTable, addr)
-		self.connTableLock.Unlock()
-		self.connect(addr)
-
+		self.releaseConn(addr,conn)
 		return err
 	}
 
 	if body != nil && len(body) > 0 {
 		_, err = conn.Write(body)
 		if err != nil {
+			self.releaseConn(addr,conn)
 			return err
 		}
 	}
 
 	return nil
+}
+
+func (self *DefalutRemotingClient) releaseConn(addr string, conn net.Conn )  {
+	conn.Close()
+	self.connTableLock.Lock()
+	delete(self.connTable, addr)
+	self.connTableLock.Unlock()
 }
