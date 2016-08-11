@@ -190,6 +190,7 @@ func (self *DefaultConsumer) pullMessage(pullRequest *PullRequest) {
 
 	pullCallback := func(responseFuture *ResponseFuture) {
 		var nextBeginOffset int64 = pullRequest.nextOffset
+
 		if responseFuture != nil {
 			responseCommand := responseFuture.responseCommand
 			if responseCommand.Code == SUCCESS && len(responseCommand.Body) > 0 {

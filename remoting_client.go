@@ -48,17 +48,19 @@ func NewDefaultRemotingClient() RemotingClient {
 }
 
 func (self *DefalutRemotingClient) ScanResponseTable() {
+	self.responseTableLock.Lock()
 	for seq, response := range self.responseTable {
-		if  (response.beginTimestamp + 5) <= time.Now().Unix() {
-			self.responseTableLock.Lock()
+		if  (response.beginTimestamp + 30) <= time.Now().Unix() {
+
 			delete(self.responseTable, seq)
-			self.responseTableLock.Unlock()
+
 			if response.invokeCallback != nil {
 				response.invokeCallback(nil)
+				glog.Warningf("remove time out request %v", response)
 			}
-			glog.Warningf("remove time out request %v", response)
 		}
 	}
+	self.responseTableLock.Unlock()
 
 }
 
