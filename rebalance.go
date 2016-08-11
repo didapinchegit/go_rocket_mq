@@ -27,7 +27,7 @@ type Rebalance struct {
 	consumer                     *DefaultConsumer
 	processQueueTable            map[MessageQueue]int32
 	processQueueTableLock sync.RWMutex
-	mutex                        sync.Mutex
+	mutex sync.Mutex
 }
 
 func NewRebalance() *Rebalance {
@@ -126,7 +126,9 @@ func (self *Rebalance) rebalanceByTopic(topic string) error {
 		return err
 	}
 
+	self.topicSubscribeInfoTableLock.RLock()
 	mqs, ok := self.topicSubscribeInfoTable[topic]
+	self.topicSubscribeInfoTableLock.RUnlock()
 	if ok && len(mqs) > 0 && len(cidAll) > 0 {
 		var messageQueues MessageQueues = mqs
 		var consumerIdSorter ConsumerIdSorter = cidAll

@@ -107,6 +107,9 @@ func (self *DefalutRemotingClient) invokeSync(addr string, request *RemotingComm
 	case <-response.done:
 		return response.responseCommand, nil
 	case <-time.After(3 * time.Second):
+		self.responseTableLock.Lock()
+		delete(self.responseTable,request.Opaque)
+		self.responseTableLock.Unlock()
 		return nil, errors.New("invoke sync timeout")
 	}
 
