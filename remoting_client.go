@@ -28,6 +28,7 @@ type RemotingClient interface {
 	connect(addr string) (net.Conn, error)
 	invokeAsync(addr string, request *RemotingCommand, timeoutMillis int64, invokeCallback InvokeCallback) error
 	invokeSync(addr string, request *RemotingCommand, timeoutMillis int64) (*RemotingCommand, error)
+	ScanResponseTable()
 }
 
 type DefalutRemotingClient struct {
@@ -44,6 +45,21 @@ func NewDefaultRemotingClient() RemotingClient {
 		connTable:    make(map[string]net.Conn),
 		responseTable: make(map[int32]*ResponseFuture),
 	}
+}
+
+func (self *DefalutRemotingClient) ScanResponseTable() {
+	for seq, response := range self.responseTable {
+		if  (response.beginTimestamp + 5) <= time.Now().Unix() {
+			self.responseTableLock.Lock()
+			delete(self.responseTable, seq)
+			self.responseTableLock.Unlock()
+			if response.invokeCallback != nil {
+				response.invokeCallback(nil)
+			}
+			glog.Warningf("remove time out request %v", response)
+		}
+	}
+
 }
 
 func (self *DefalutRemotingClient) connect(addr string) (conn net.Conn, err error) {
@@ -107,9 +123,6 @@ func (self *DefalutRemotingClient) invokeSync(addr string, request *RemotingComm
 	case <-response.done:
 		return response.responseCommand, nil
 	case <-time.After(3 * time.Second):
-		self.responseTableLock.Lock()
-		delete(self.responseTable,request.Opaque)
-		self.responseTableLock.Unlock()
 		return nil, errors.New("invoke sync timeout")
 	}
 
@@ -160,7 +173,7 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 	for {
 		n, err := conn.Read(b)
 		if err != nil {
-			self.releaseConn(addr,conn)
+			self.releaseConn(addr, conn)
 			glog.Error(err, addr)
 
 			return
@@ -168,7 +181,7 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 
 		_, err = buf.Write(b[:n])
 		if err != nil {
-			self.releaseConn(addr,conn)
+			self.releaseConn(addr, conn)
 			return
 		}
 
@@ -284,20 +297,20 @@ func (self *DefalutRemotingClient) sendRequest(header, body []byte, conn net.Con
 	_, err := conn.Write(buf.Bytes())
 
 	if err != nil {
-		self.releaseConn(addr,conn)
+		self.releaseConn(addr, conn)
 		return err
 	}
 
 	_, err = conn.Write(header)
 	if err != nil {
-		self.releaseConn(addr,conn)
+		self.releaseConn(addr, conn)
 		return err
 	}
 
 	if body != nil && len(body) > 0 {
 		_, err = conn.Write(body)
 		if err != nil {
-			self.releaseConn(addr,conn)
+			self.releaseConn(addr, conn)
 			return err
 		}
 	}
@@ -305,7 +318,7 @@ func (self *DefalutRemotingClient) sendRequest(header, body []byte, conn net.Con
 	return nil
 }
 
-func (self *DefalutRemotingClient) releaseConn(addr string, conn net.Conn )  {
+func (self *DefalutRemotingClient) releaseConn(addr string, conn net.Conn) {
 	conn.Close()
 	self.connTableLock.Lock()
 	delete(self.connTable, addr)

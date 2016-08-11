@@ -382,6 +382,17 @@ func (self *MqClient) startScheduledTask() {
 			rebalanceTimer.Reset(30 * time.Second)
 		}
 	}()
+
+
+	go func() {
+		timeoutTimer := time.NewTimer(3 * time.Second)
+		for {
+			<-timeoutTimer.C
+			self.remotingClient.ScanResponseTable()
+			timeoutTimer.Reset(time.Second)
+		}
+	}()
+
 }
 
 func (self *MqClient) doRebalance() {

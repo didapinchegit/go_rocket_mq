@@ -229,7 +229,6 @@ func (self *DefaultConsumer) pullMessage(pullRequest *PullRequest) {
 							nextBeginOffset, err = strconv.ParseInt(nextBeginOffsetStr, 10, 64)
 							if err != nil {
 								glog.Error(err)
-								return
 							}
 
 						}
@@ -245,6 +244,7 @@ func (self *DefaultConsumer) pullMessage(pullRequest *PullRequest) {
 				time.Sleep(1 * time.Second)
 			}
 		} else {
+			glog.Error("responseFuture is nil")
 		}
 
 		nextPullRequest := &PullRequest{
