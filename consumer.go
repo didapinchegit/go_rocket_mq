@@ -219,7 +219,6 @@ func (self *DefaultConsumer) pullMessage(pullRequest *PullRequest) {
 					self.offsetStore.updateOffset(pullRequest.messageQueue, nextBeginOffset, false)
 				}
 			} else if responseCommand.Code == PULL_NOT_FOUND {
-				glog.Error("PULL_NOT_FOUND")
 			} else if responseCommand.Code == PULL_RETRY_IMMEDIATELY || responseCommand.Code == PULL_OFFSET_MOVED {
 				glog.Errorf("pull message error,code=%d,request=%v", responseCommand.Code,requestHeader)
 				var err error
