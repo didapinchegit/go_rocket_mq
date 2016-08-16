@@ -3,8 +3,14 @@ package rocketmq
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/golang/glog"
+	"encoding/json"
+	"io/ioutil"
+	"compress/zlib"
 )
-
+const(
+	CompressedFlag = (0x1 << 0)
+)
 type Message struct {
 	Topic      string
 	Flag       int32
@@ -37,10 +43,12 @@ func decodeMessage(data []byte) []*MessageExt {
 	var topic, body, properties, bornHost, storeHost []byte
 	var propertiesLength int16
 
+	var propertiesmap map[string]string
+
 	msgs := make([]*MessageExt, 0, 32)
 	for buf.Len() > 0 {
 		msg := new(MessageExt)
-		binary.Read(buf, binary.LittleEndian, &storeSize)
+		binary.Read(buf, binary.BigEndian, &storeSize)
 		binary.Read(buf, binary.BigEndian, &magicCode)
 		binary.Read(buf, binary.BigEndian, &bodyCRC)
 		binary.Read(buf, binary.BigEndian, &queueId)
@@ -62,13 +70,41 @@ func decodeMessage(data []byte) []*MessageExt {
 		if bodyLength > 0 {
 			body = make([]byte, bodyLength)
 			binary.Read(buf, binary.BigEndian, body)
+
+			if (sysFlag &  CompressedFlag) == CompressedFlag {
+				b := bytes.NewReader(body)
+				z, err := zlib.NewReader(b)
+				if err != nil {
+					glog.Error(err)
+					return nil
+				}
+				defer z.Close()
+				body, err = ioutil.ReadAll(z)
+				if err != nil {
+					glog.Error(err)
+					return nil
+				}
+			}
+
 		}
 		binary.Read(buf, binary.BigEndian, &topicLen)
 		topic = make([]byte, topicLen)
 		binary.Read(buf, binary.BigEndian, &topic)
 		binary.Read(buf, binary.BigEndian, &propertiesLength)
-		properties = make([]byte, propertiesLength)
-		binary.Read(buf, binary.BigEndian, &properties)
+		if propertiesLength >0 {
+			properties = make([]byte, propertiesLength)
+			binary.Read(buf, binary.BigEndian, &properties)
+			propertiesmap = make(map[string]string)
+			json.Unmarshal(properties,&propertiesmap)
+		}
+
+		if magicCode != -626843481 {
+			glog.Infof("magic code is error %d",magicCode)
+			return nil
+		}
+
+
+
 		msg.Topic = string(topic)
 		msg.QueueId = queueId
 		msg.SysFlag = sysFlag
@@ -82,6 +118,8 @@ func decodeMessage(data []byte) []*MessageExt {
 		msg.StoreTimestamp = storeTimestamp
 		msg.PreparedTransactionOffset = preparedTransactionOffset
 		msg.Body = body
+		msg.Properties = propertiesmap
+
 		msgs = append(msgs, msg)
 	}
 
