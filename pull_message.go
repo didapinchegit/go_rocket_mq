@@ -19,9 +19,13 @@ type PullMessageRequestHeader struct {
 	SubVersion           int64  `json:"subVersion"`
 }
 
+type Service interface {
+	pullMessage(pullRequest *PullRequest)
+}
+
 type PullMessageService struct {
 	pullRequestQueue chan *PullRequest
-	consumer         *DefaultConsumer
+	service          Service
 }
 
 func NewPullMessageService() *PullMessageService {
@@ -30,9 +34,9 @@ func NewPullMessageService() *PullMessageService {
 	}
 }
 
-func (self *PullMessageService) start() {
+func (p *PullMessageService) start() {
 	for {
-		pullRequest := <-self.pullRequestQueue
-		self.consumer.pullMessage(pullRequest)
+		pullRequest := <-p.pullRequestQueue
+		p.service.pullMessage(pullRequest)
 	}
 }
