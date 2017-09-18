@@ -334,7 +334,7 @@ func (m *MqClient) updateTopicRouteInfoFromNameServerKernel(topic string, isDefa
 		topicRouteData, err = m.getTopicRouteInfoFromNameServer(topic, 3000*1000)
 	}
 
-	if !topicRouteDataIsNil(topicRouteData) {
+	if topicRouteData != nil && !topicRouteDataIsNil(topicRouteData) {
 		old := m.topicRouteTable[topic]
 		changed := sliceCompare(old, topicRouteData)
 
