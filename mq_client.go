@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	//"github.com/golang/glog"
 	"math"
 	"strconv"
 	"strings"

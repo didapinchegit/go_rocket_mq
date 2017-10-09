@@ -2,7 +2,6 @@ package rocketmq
 
 import (
 	"fmt"
-	//"github.com/golang/glog"
 	"net"
 	"os"
 	"strconv"

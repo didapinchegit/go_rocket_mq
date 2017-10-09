@@ -2,7 +2,6 @@ package rocketmq
 
 import (
 	"errors"
-	//"github.com/golang/glog"
 	"fmt"
 	"sync"
 	"sync/atomic"

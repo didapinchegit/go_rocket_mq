@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
-	//"github.com/golang/glog"
 	"fmt"
 	"math/rand"
 	"net"

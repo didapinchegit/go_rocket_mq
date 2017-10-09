@@ -12,8 +12,7 @@ type messageClientIDSetter struct {
 	basePos       int
 	startTime     int64
 	nextStartTime int64
-	//ip  + pid + classloaderid + counter + time
-	stringBuilder *bytes.Buffer
+	stringBuilder *bytes.Buffer // ip  + pid + classloaderid + counter + time
 	buffer        *bytes.Buffer
 }
 
@@ -28,8 +27,7 @@ func init() {
 }
 
 var MessageClientIDSetter = messageClientIDSetter{
-	//length := 4 + 2 + 4 + 4 + 2
-	stringBuilder: bytes.NewBuffer([]byte{}),
+	stringBuilder: bytes.NewBuffer([]byte{}), // length := 4 + 2 + 4 + 4 + 2
 	basePos:       stringBuilder.Len() * 2,
 	counter:       0,
 }

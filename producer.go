@@ -2,7 +2,6 @@ package rocketmq
 
 import (
 	_ "fmt"
-	//"github.com/golang/glog"
 	_ "encoding/binary"
 	_ "encoding/json"
 	"errors"
