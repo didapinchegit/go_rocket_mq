@@ -280,7 +280,7 @@ func (d *DefaultProducer) sendKernel(msg *Message, mq *MessageQueue, communicati
 		}
 
 		if d.hasCheckForbiddenHook() {
-			fmt.Println(brokerAddr)
+			fmt.Fprintf(os.Stderr, brokerAddr)
 		}
 		if d.hasSendMessageHook() {
 		}
@@ -397,9 +397,9 @@ func (d *DefaultProducer) sendMessage(addr string, brokerName string, msg *Messa
 
 func (d *DefaultProducer) sendMessageSync(addr string, brokerName string, msg *Message, timeoutMillis int64, remotingCommand *RemotingCommand) (sendResult *SendResult, err error) {
 	var response *RemotingCommand
-	fmt.Println("msg:", msg.Topic, msg.Flag, string(msg.Body), msg.Properties)
+	fmt.Fprintln(os.Stderr, "msg:", msg.Topic, msg.Flag, string(msg.Body), msg.Properties)
 	if response, err = d.remotingClient.invokeSync(addr, remotingCommand, timeoutMillis); err != nil {
-		fmt.Println("sendMessageSync err", err)
+		fmt.Fprintln(os.Stderr, "sendMessageSync err", err)
 	}
 	return d.processSendResponse(brokerName, msg, response)
 }
@@ -424,7 +424,7 @@ func (d *DefaultProducer) sendMessageAsync(addr string, brokerName string, msg *
 		sendCallback()
 		if responseCommand != nil {
 			if sendResult, err = d.processSendResponse(brokerName, msg, responseCommand); sendResult == nil || err != nil {
-				fmt.Println("sendResult can't be null, error ", err)
+				fmt.Fprintln(os.Stderr, "sendResult can't be null, error ", err)
 				producer.updateFaultItem(brokerName, time.Now().Unix()-responseFuture.beginTimestamp, true)
 				return
 			} else {
@@ -443,6 +443,11 @@ func (d *DefaultProducer) sendMessageAsync(addr string, brokerName string, msg *
 
 func (d *DefaultProducer) processSendResponse(brokerName string, msg *Message, response *RemotingCommand) (sendResult *SendResult, err error) {
 	var sendStatus int
+
+	if response == nil {
+		err = errors.New("response in processSendResponse is nil!")
+		return
+	}
 	switch response.Code {
 	// TODO add log
 	case FlushDiskTimeout:
