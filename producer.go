@@ -1,11 +1,11 @@
 package rocketmq
 
 import (
-	_ "fmt"
 	_ "encoding/binary"
 	_ "encoding/json"
 	"errors"
 	"fmt"
+	_ "fmt"
 	"os"
 	"strconv"
 	"strings"
