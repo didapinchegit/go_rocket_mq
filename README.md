@@ -1,11 +1,11 @@
-#Introduction
+# Introduction
 This is a RocketMQ client of golang.
 
-#Import package
-import rocketmq "github.com/go_rocket_mq"
+# Import package
+import "github.com/sevenNt/rocketmq"
 
-#Getting started
-###Get message with consumer
+# Getting started
+### Get message with consumer
 ```
 group := "dev-VodHotClacSrcData"
 topic := "canal_vod_collect__video_collected_count_live"
@@ -33,7 +33,7 @@ consumer.Start()
 
 time.Sleep(timeSleep)
 ```
-###Send message with producer
+### Send message with producer
 - Synchronous sending
 ```
 group := "dev-VodHotClacSrcData"
