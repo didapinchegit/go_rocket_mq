@@ -1,11 +1,11 @@
 # Introduction
-This is a RocketMQ client of golang.
+A RocketMQ client for golang.
 
 # Import package
 import "github.com/sevenNt/rocketmq"
 
 # Getting started
-### Get message with consumer
+### Getting message with consumer
 ```
 group := "dev-VodHotClacSrcData"
 topic := "canal_vod_collect__video_collected_count_live"
@@ -33,7 +33,8 @@ consumer.Start()
 
 time.Sleep(timeSleep)
 ```
-### Send message with producer
+
+### Sending message with producer
 - Synchronous sending
 ```
 group := "dev-VodHotClacSrcData"
@@ -57,6 +58,7 @@ if sendResult, err := producer.Send(msg); err != nil {
     fmt.Printlnf("Sync send success!")
 }
 ```
+
 - Asynchronous sending
 ```
 group := "dev-VodHotClacSrcData"
@@ -82,6 +84,7 @@ if err := producer.SendAsync(msg, sendCallback); err != nil {
     fmt.Printlnf("Async send success!")
 }
 ```
+
 - Oneway sending
 ```
 group := "dev-VodHotClacSrcData"
