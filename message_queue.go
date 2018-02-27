@@ -6,19 +6,31 @@ type MessageQueue struct {
 	queueId    int32
 }
 
-func (self *MessageQueue) clone() *MessageQueue {
+func NewMessageQueue(topic string, brokerName string, queueId int32) *MessageQueue {
+	return &MessageQueue{
+		topic:      topic,
+		brokerName: brokerName,
+		queueId:    queueId,
+	}
+}
+
+func (m *MessageQueue) clone() *MessageQueue {
 	no := new(MessageQueue)
-	no.topic = self.topic
-	no.queueId = self.queueId
-	no.brokerName = self.brokerName
+	no.topic = m.topic
+	no.queueId = m.queueId
+	no.brokerName = m.brokerName
 	return no
+}
+
+func (m MessageQueue) getBrokerName() string {
+	return m.brokerName
 }
 
 type MessageQueues []*MessageQueue
 
-func (self MessageQueues) Less(i, j int) bool {
-	imq := self[i]
-	jmq := self[j]
+func (m MessageQueues) Less(i, j int) bool {
+	imq := m[i]
+	jmq := m[j]
 
 	if imq.topic < jmq.topic {
 		return true
@@ -34,15 +46,14 @@ func (self MessageQueues) Less(i, j int) bool {
 
 	if imq.queueId < jmq.queueId {
 		return true
-	} else {
-		return false
 	}
+	return false
 }
 
-func (self MessageQueues) Swap(i, j int) {
-	self[i], self[j] = self[j], self[i]
+func (m MessageQueues) Swap(i, j int) {
+	m[i], m[j] = m[j], m[i]
 }
 
-func (self MessageQueues) Len() int {
-	return len(self)
+func (m MessageQueues) Len() int {
+	return len(m)
 }

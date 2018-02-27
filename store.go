@@ -2,15 +2,15 @@ package rocketmq
 
 import (
 	"errors"
-	"github.com/golang/glog"
+	"fmt"
 	"sync"
 	"sync/atomic"
 )
 
 const (
-	MEMORY_FIRST_THEN_STORE = 0
-	READ_FROM_MEMORY        = 1
-	READ_FROM_STORE         = 2
+	MemoryFirstThenStore = 0
+	ReadFromMemory       = 1
+	ReadFromStore        = 2
 )
 
 type OffsetStore interface {
@@ -23,33 +23,33 @@ type OffsetStore interface {
 	//cloneOffsetTable(topic string) map[MessageQueue]int64
 }
 type RemoteOffsetStore struct {
-	groupName   string
-	mqClient    *MqClient
-	offsetTable map[MessageQueue]int64
+	groupName       string
+	mqClient        *MqClient
+	offsetTable     map[MessageQueue]int64
 	offsetTableLock sync.RWMutex
 }
 
-func (self *RemoteOffsetStore) readOffset(mq *MessageQueue, readType int) int64 {
+func (r *RemoteOffsetStore) readOffset(mq *MessageQueue, readType int) int64 {
 
 	switch readType {
-	case MEMORY_FIRST_THEN_STORE:
-	case READ_FROM_MEMORY:
-		self.offsetTableLock.RLock()
-		offset, ok := self.offsetTable[*mq]
-		self.offsetTableLock.RUnlock()
+	case MemoryFirstThenStore:
+	case ReadFromMemory:
+		r.offsetTableLock.RLock()
+		offset, ok := r.offsetTable[*mq]
+		r.offsetTableLock.RUnlock()
 		if ok {
 			return offset
-		} else if readType == READ_FROM_MEMORY {
+		} else if readType == ReadFromMemory {
 			return -1
 		}
-	case READ_FROM_STORE:
-		offset, err := self.fetchConsumeOffsetFromBroker(mq)
+	case ReadFromStore:
+		offset, err := r.fetchConsumeOffsetFromBroker(mq)
 
 		if err != nil {
-			glog.Error(err)
+			fmt.Println(err)
 			return -1
 		}
-		self.updateOffset(mq, offset, false)
+		r.updateOffset(mq, offset, false)
 		return offset
 	}
 
@@ -57,33 +57,33 @@ func (self *RemoteOffsetStore) readOffset(mq *MessageQueue, readType int) int64 
 
 }
 
-func (self *RemoteOffsetStore) fetchConsumeOffsetFromBroker(mq *MessageQueue) (int64, error) {
-	brokerAddr, _, found := self.mqClient.findBrokerAddressInSubscribe(mq.brokerName, 0, false)
+func (r *RemoteOffsetStore) fetchConsumeOffsetFromBroker(mq *MessageQueue) (int64, error) {
+	brokerAddr, _, found := r.mqClient.findBrokerAddressInSubscribe(mq.brokerName, 0, false)
 
 	if !found {
-		if err := self.mqClient.updateTopicRouteInfoFromNameServerByTopic(mq.topic); err != nil {
+		if _, err := r.mqClient.updateTopicRouteInfoFromNameServerKernel(mq.topic, false, DefaultProducer{}); err != nil {
 			return 0, err
 		}
-		brokerAddr, _, found = self.mqClient.findBrokerAddressInSubscribe(mq.brokerName, 0, false)
+		brokerAddr, _, found = r.mqClient.findBrokerAddressInSubscribe(mq.brokerName, 0, false)
 	}
 
 	if found {
 		requestHeader := &QueryConsumerOffsetRequestHeader{}
 		requestHeader.Topic = mq.topic
 		requestHeader.QueueId = mq.queueId
-		requestHeader.ConsumerGroup = self.groupName
-		return self.mqClient.queryConsumerOffset(brokerAddr, requestHeader, 3000)
+		requestHeader.ConsumerGroup = r.groupName
+		return r.mqClient.queryConsumerOffset(brokerAddr, requestHeader, 3000)
 	}
 
 	return 0, errors.New("fetch consumer offset error")
 }
 
-func (self *RemoteOffsetStore) persist(mq *MessageQueue) {
-	offset, ok := self.offsetTable[*mq]
+func (r *RemoteOffsetStore) persist(mq *MessageQueue) {
+	offset, ok := r.offsetTable[*mq]
 	if ok {
-		err := self.updateConsumeOffsetToBroker(mq, offset)
+		err := r.updateConsumeOffsetToBroker(mq, offset)
 		if err != nil {
-			glog.Error(err)
+			fmt.Println(err)
 		}
 	}
 }
@@ -95,48 +95,48 @@ type UpdateConsumerOffsetRequestHeader struct {
 	commitOffset  int64
 }
 
-func (self *RemoteOffsetStore) updateConsumeOffsetToBroker(mq *MessageQueue, offset int64) error {
-	addr, found, _ := self.mqClient.findBrokerAddressInSubscribe(mq.brokerName, 0, false)
+func (r *RemoteOffsetStore) updateConsumeOffsetToBroker(mq *MessageQueue, offset int64) error {
+	addr, found, _ := r.mqClient.findBrokerAddressInSubscribe(mq.brokerName, 0, false)
 	if !found {
-		if err := self.mqClient.updateTopicRouteInfoFromNameServerByTopic(mq.topic); err != nil {
+		if _, err := r.mqClient.updateTopicRouteInfoFromNameServerKernel(mq.topic, false, DefaultProducer{}); err != nil {
 			return err
 		}
-		addr, found, _ = self.mqClient.findBrokerAddressInSubscribe(mq.brokerName, 0, false)
+		addr, found, _ = r.mqClient.findBrokerAddressInSubscribe(mq.brokerName, 0, false)
 	}
 
 	if found {
 		requestHeader := &UpdateConsumerOffsetRequestHeader{
-			consumerGroup: self.groupName,
+			consumerGroup: r.groupName,
 			topic:         mq.topic,
 			queueId:       mq.queueId,
 			commitOffset:  offset,
 		}
 
-		self.mqClient.updateConsumerOffsetOneway(addr, requestHeader, 5*1000)
+		r.mqClient.updateConsumerOffsetOneway(addr, requestHeader, 5*1000)
 		return nil
 	}
 	return errors.New("not found broker")
 }
 
-func (self *RemoteOffsetStore) updateOffset(mq *MessageQueue, offset int64, increaseOnly bool) {
+func (r *RemoteOffsetStore) updateOffset(mq *MessageQueue, offset int64, increaseOnly bool) {
 	if mq != nil {
-		self.offsetTableLock.RLock()
-		offsetOld, ok := self.offsetTable[*mq]
-		self.offsetTableLock.RUnlock()
+		r.offsetTableLock.RLock()
+		offsetOld, ok := r.offsetTable[*mq]
+		r.offsetTableLock.RUnlock()
 		if !ok {
-			self.offsetTableLock.Lock()
-			self.offsetTable[*mq] = offset
-			self.offsetTableLock.Unlock()
+			r.offsetTableLock.Lock()
+			r.offsetTable[*mq] = offset
+			r.offsetTableLock.Unlock()
 		} else {
 			if increaseOnly {
 				atomic.AddInt64(&offsetOld, offset)
-				self.offsetTableLock.Lock()
-				self.offsetTable[*mq] = offsetOld
-				self.offsetTableLock.Unlock()
+				r.offsetTableLock.Lock()
+				r.offsetTable[*mq] = offsetOld
+				r.offsetTableLock.Unlock()
 			} else {
-				self.offsetTableLock.Lock()
-				self.offsetTable[*mq] = offset
-				self.offsetTableLock.Unlock()
+				r.offsetTableLock.Lock()
+				r.offsetTable[*mq] = offset
+				r.offsetTableLock.Unlock()
 			}
 		}
 
