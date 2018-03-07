@@ -28,7 +28,6 @@ type Config struct {
 }
 
 type Consumer interface {
-	//Admin
 	Start() error
 	Shutdown()
 	RegisterMessageListener(listener MessageListener)
@@ -46,15 +45,13 @@ type DefaultConsumer struct {
 	consumerType     string
 	messageModel     string
 	unitMode         bool
-
-	subscription    map[string]string
-	messageListener MessageListener
-	offsetStore     OffsetStore
-	brokers         map[string]net.Conn
-
-	rebalance      *Rebalance
-	remotingClient RemotingClient
-	mqClient       *MqClient
+	subscription     map[string]string
+	messageListener  MessageListener
+	offsetStore      OffsetStore
+	brokers          map[string]net.Conn
+	rebalance        *Rebalance
+	remotingClient   RemotingClient
+	mqClient         *MqClient
 }
 
 func NewDefaultConsumer(consumerGroup string, conf *Config) (Consumer, error) {

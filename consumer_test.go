@@ -5,15 +5,11 @@ import (
 	"time"
 )
 
-// dev-goProducerConsumerTest
 var consumerGroup = "dev-goProducerConsumerTest"
-
-// goProducerConsumerTest
 var consumerTopic = "goProducerConsumerTest"
-var timeSleep = 60 * time.Second
+var sleep = 60 * time.Second
 var consumerConf = &Config{
-	//Nameserver:   "192.168.7.103:9876",
-	Namesrv:      "192.168.6.69:9876",
+	Namesrv:      "192.168.7.101:9876;192.168.7.102:9876;192.168.7.103:9876",
 	ClientIp:     "192.168.23.137",
 	InstanceName: "DEFAULT_tt",
 }
@@ -34,5 +30,5 @@ func TestConsume(t *testing.T) {
 		})
 	consumer.Start()
 
-	time.Sleep(timeSleep)
+	time.Sleep(sleep)
 }

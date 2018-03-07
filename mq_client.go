@@ -563,10 +563,10 @@ func (m *MqClient) start() {
 		if m.defaultProducer != nil {
 			m.defaultProducer.start(false)
 		}
-		fmt.Fprintln(os.Stderr, "the client factory [{}] start OK", m.clientId)
+		fmt.Fprintf(os.Stderr, "The client factory [%s] start OK", m.clientId)
 		m.serviceState = Running
 	case Running, ShutdownAlready, StartFailed:
-		fmt.Fprintln(os.Stderr, "The Factory object["+m.clientId+"] has been created before, and failed.")
+		fmt.Fprintf(os.Stderr, "The Factory object[%s] has been created before, and failed.", m.clientId)
 	}
 
 }
@@ -588,18 +588,16 @@ func (m *MqClient) queryConsumerOffset(addr string, requestHeader *QueryConsumer
 	}
 
 	remotingCommand.ExtFields = requestHeader
-	reponse, err := m.remotingClient.invokeSync(addr, remotingCommand, timeoutMillis)
-
+	response, err := m.remotingClient.invokeSync(addr, remotingCommand, timeoutMillis)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 0, err
 	}
-
-	if reponse.Code == QueryNotFound {
+	if response.Code == QueryNotFound {
 		return 0, nil
 	}
 
-	if extFields, ok := (reponse.ExtFields).(map[string]interface{}); ok {
+	if extFields, ok := (response.ExtFields).(map[string]interface{}); ok {
 		if offsetInter, ok := extFields["offset"]; ok {
 			if offsetStr, ok := offsetInter.(string); ok {
 				offset, err := strconv.ParseInt(offsetStr, 10, 64)
@@ -612,7 +610,7 @@ func (m *MqClient) queryConsumerOffset(addr string, requestHeader *QueryConsumer
 			}
 		}
 	}
-	fmt.Fprintln(os.Stderr, requestHeader, reponse)
+	fmt.Fprintln(os.Stderr, requestHeader, response)
 	return 0, errors.New("query offset error")
 }
 

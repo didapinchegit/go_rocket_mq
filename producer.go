@@ -36,16 +36,14 @@ const (
 type SendCallback func() error
 
 type DefaultProducer struct {
-	conf          *Config
-	producerGroup string
-	producerType  string
-
-	rebalance             *Rebalance
-	remotingClient        RemotingClient
-	mqClient              *MqClient
-	topicPublishInfoTable map[string]*TopicPublishInfo
-	instanceName          string
-
+	conf                             *Config
+	producerGroup                    string
+	producerType                     string
+	rebalance                        *Rebalance
+	remotingClient                   RemotingClient
+	mqClient                         *MqClient
+	topicPublishInfoTable            map[string]*TopicPublishInfo
+	instanceName                     string
 	sendMsgTimeout                   int64
 	serviceState                     int
 	createTopicKey                   string
@@ -55,8 +53,7 @@ type DefaultProducer struct {
 	retryTimesWhenSendAsyncFailed    int
 	retryAnotherBrokerWhenNotStoreOK bool
 	maxMessageSize                   int
-
-	vipChannelEnabled bool
+	vipChannelEnabled                bool
 }
 
 func NewDefaultProducer(producerGroup string, conf *Config) (Producer, error) {
@@ -128,7 +125,6 @@ func (d *DefaultProducer) start(startFactory bool) (err error) {
 			d.mqClient.start()
 		}
 		d.serviceState = Running
-
 	case Running, ShutdownAlready, StartFailed:
 		err = errors.New("The producer service state not OK, maybe started once," + strconv.Itoa(d.serviceState))
 	}
@@ -226,7 +222,7 @@ func (d *DefaultProducer) send(msg *Message, communicationMode int, sendCallback
 	if d.remotingClient.getNameServerAddressList() == nil || len(d.remotingClient.getNameServerAddressList()) == 0 {
 		err = errors.New("no name server address, please set it")
 	}
-	err = errors.New("No route info of this topic," + msg.Topic)
+	err = fmt.Errorf("No route info of this topic, %s" + msg.Topic)
 	return
 }
 

@@ -5,20 +5,16 @@ import (
 	"testing"
 )
 
-// dev-goProducerConsumerTest
-var group = "dev-goProducerConsumerTest"
-
-// goProducerConsumerTest
+var producerGroup = "dev-goProducerConsumerTest"
 var topic = "goProducerConsumerTest"
 var conf = &Config{
-	//Nameserver:   "192.168.7.101:9876;192.168.7.102:9876;192.168.7.103:9876",
-	Namesrv:      "192.168.6.69:9876",
+	Namesrv:      "192.168.7.101:9876;192.168.7.102:9876;192.168.7.103:9876",
 	ClientIp:     "192.168.23.137",
 	InstanceName: "DEFAULT_tt",
 }
 
 func TestSend(t *testing.T) {
-	producer, err := NewDefaultProducer(group, conf)
+	producer, err := NewDefaultProducer(producerGroup, conf)
 	producer.Start()
 	if err != nil {
 		t.Fatalf("NewDefaultProducer err, %s", err)
@@ -26,8 +22,7 @@ func TestSend(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		msg := NewMessage(topic, []byte("Hello RocketMQ "+strconv.Itoa(i)))
 		if sendResult, err := producer.Send(msg); err != nil {
-			t.Error("Sync send fail!") // 如果不是如预期的那么就报错
-			t.Fatalf("error is %s", err)
+			t.Fatalf("Sync sending fail!, %s", err.Error())
 		} else {
 			t.Log("sendResult", sendResult)
 			t.Logf("Sync sending success, %d", i)
@@ -45,7 +40,7 @@ func TestSend(t *testing.T) {
 }
 
 func TestSendOneway(t *testing.T) {
-	producer, err := NewDefaultProducer(group, conf)
+	producer, err := NewDefaultProducer(producerGroup, conf)
 	producer.Start()
 	if err != nil {
 		t.Fatalf("NewDefaultProducer err, %s", err)
@@ -53,8 +48,7 @@ func TestSendOneway(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		msg := NewMessage(topic, []byte("Hello RocketMQ "+strconv.Itoa(i)))
 		if err := producer.SendOneway(msg); err != nil {
-			t.Error("Oneway send fail!") // 如果不是如预期的那么就报错
-			t.Fatalf("error is %s", err)
+			t.Fatalf("Oneway sending fail! %s", err.Error())
 		} else {
 			t.Logf("Oneway sending success, %d", i)
 		}
@@ -64,7 +58,7 @@ func TestSendOneway(t *testing.T) {
 }
 
 func TestSendAsync(t *testing.T) {
-	producer, err := NewDefaultProducer(group, conf)
+	producer, err := NewDefaultProducer(producerGroup, conf)
 	producer.Start()
 	if err != nil {
 		t.Fatalf("NewDefaultProducer err, %s", err)
@@ -76,8 +70,7 @@ func TestSendAsync(t *testing.T) {
 			return nil
 		}
 		if err := producer.SendAsync(msg, sendCallback); err != nil {
-			t.Error("Async send fail!")
-			t.Fatalf("error is %s", err.Error())
+			t.Fatalf("Async sending fail! %s", err.Error())
 		} else {
 			t.Logf("Async sending success, %d", i)
 		}

@@ -22,6 +22,7 @@ type OffsetStore interface {
 	//removeOffset(mq MessageQueue)
 	//cloneOffsetTable(topic string) map[MessageQueue]int64
 }
+
 type RemoteOffsetStore struct {
 	groupName       string
 	mqClient        *MqClient
@@ -43,7 +44,6 @@ func (r *RemoteOffsetStore) readOffset(mq *MessageQueue, readType int) int64 {
 		}
 	case ReadFromStore:
 		offset, err := r.fetchConsumeOffsetFromBroker(mq)
-
 		if err != nil {
 			fmt.Println(err)
 			return -1
