@@ -27,10 +27,10 @@ func TestSend(t *testing.T) {
 		msg := NewMessage(topic, []byte("Hello RocketMQ "+strconv.Itoa(i)))
 		if sendResult, err := producer.Send(msg); err != nil {
 			t.Error("Sync send fail!") // 如果不是如预期的那么就报错
-			t.Fatalf("err->%s", err)
+			t.Fatalf("error is %s", err)
 		} else {
-			t.Logf("sendResult", sendResult)
-			t.Logf("Sync send success, %d", i)
+			t.Log("sendResult", sendResult)
+			t.Logf("Sync sending success, %d", i)
 			//t.Logf("sendResult.sendStatus", sendResult.sendStatus)
 			//t.Logf("sendResult.msgId", sendResult.msgId)
 			//t.Logf("sendResult.messageQueue", sendResult.messageQueue)
@@ -41,7 +41,7 @@ func TestSend(t *testing.T) {
 		}
 	}
 
-	t.Log("Sync send success!")
+	t.Log("Sync sending success!")
 }
 
 func TestSendOneway(t *testing.T) {
@@ -54,13 +54,13 @@ func TestSendOneway(t *testing.T) {
 		msg := NewMessage(topic, []byte("Hello RocketMQ "+strconv.Itoa(i)))
 		if err := producer.SendOneway(msg); err != nil {
 			t.Error("Oneway send fail!") // 如果不是如预期的那么就报错
-			t.Fatalf("err->%s", err)
+			t.Fatalf("error is %s", err)
 		} else {
-			t.Logf("Oneway send success, %d", i)
+			t.Logf("Oneway sending success, %d", i)
 		}
 	}
 
-	t.Log("Oneway send success!")
+	t.Log("Oneway sending success!")
 }
 
 func TestSendAsync(t *testing.T) {
@@ -76,12 +76,12 @@ func TestSendAsync(t *testing.T) {
 			return nil
 		}
 		if err := producer.SendAsync(msg, sendCallback); err != nil {
-			t.Error("Async send fail!") // 如果不是如预期的那么就报错
-			t.Fatalf("err->%s", err)
+			t.Error("Async send fail!")
+			t.Fatalf("error is %s", err.Error())
 		} else {
-			t.Logf("Async send success, %d", i)
+			t.Logf("Async sending success, %d", i)
 		}
 	}
 
-	t.Log("Async send success!")
+	t.Log("Async sending success!")
 }

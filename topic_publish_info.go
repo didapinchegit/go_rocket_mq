@@ -24,7 +24,7 @@ func (t *TopicPublishInfo) ok() (ok bool) {
 
 func (t *TopicPublishInfo) selectOneMessageQueue(lastBrokerName string) (messageQueue *MessageQueue) {
 	// TODO add sendLatencyFaultEnable trigger and handle it
-	// TODO optimize algorithm of getting a queue
+	// TODO optimize algorithm of getting message from queue
 	mqCnt := len(t.messageQueueList)
 	messageQueue = t.messageQueueList[rand.Intn(mqCnt)]
 	if lastBrokerName != "" {

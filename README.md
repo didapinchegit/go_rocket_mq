@@ -1,5 +1,5 @@
 # Introduction
-A RocketMQ client for golang.
+A RocketMQ client for golang supportting producer and consumer.
 
 # Import package
 import "github.com/sevenNt/rocketmq"
@@ -52,10 +52,9 @@ if err != nil {
 }
 msg := NewMessage(topic, []byte("Hello RocketMQ!")
 if sendResult, err := producer.Send(msg); err != nil {
-    return errors.New("Sync send fail!") // 如果不是如预期的那么就报错
+    return errors.New("Sync sending fail!")
 } else {
-    fmt.Printlnf("sendResult", sendResult)
-    fmt.Printlnf("Sync send success!")
+    fmt.Println("Sync sending success!, ", sendResult)
 }
 ```
 
@@ -75,13 +74,13 @@ if err != nil {
 }
 msg := NewMessage(topic, []byte("Hello RocketMQ!")
 sendCallback := func() error {
-    fmt.Printlnf("I am callback")
+    fmt.Println("I am callback")
     return nil
 }
 if err := producer.SendAsync(msg, sendCallback); err != nil {
     return err
 } else {
-    fmt.Printlnf("Async send success!")
+    fmt.Println("Async sending success!")
 }
 ```
 
@@ -103,6 +102,6 @@ msg := NewMessage(topic, []byte("Hello RocketMQ!")
 if err := producer.SendOneway(msg); err != nil {
     return err
 } else {
-    fmt.Printlnf("Oneway send success!")
+    fmt.Println("Oneway sending success!")
 }
 ```

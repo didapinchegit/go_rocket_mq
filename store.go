@@ -30,7 +30,6 @@ type RemoteOffsetStore struct {
 }
 
 func (r *RemoteOffsetStore) readOffset(mq *MessageQueue, readType int) int64 {
-
 	switch readType {
 	case MemoryFirstThenStore:
 	case ReadFromMemory:
