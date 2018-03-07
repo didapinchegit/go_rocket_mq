@@ -1,16 +1,12 @@
 package rocketmq
 
 import (
-	_ "encoding/binary"
-	_ "encoding/json"
 	"errors"
 	"fmt"
-	_ "fmt"
 	"os"
 	"strconv"
 	"strings"
 	"sync/atomic"
-	_ "sync/atomic"
 	"time"
 )
 
@@ -145,7 +141,7 @@ func (d *DefaultProducer) Start() error {
 
 func (d *DefaultProducer) checkConfig() (err error) {
 	if d.producerGroup == DefaultProducerGroup {
-		err = errors.New("producerGroup can not equal " + DefaultProducerGroup + ", please specify another one.")
+		err = errors.New("producerGroup can not equal " + DefaultProducerGroup + ", please specify another one")
 	}
 	return
 }
@@ -228,7 +224,7 @@ func (d *DefaultProducer) send(msg *Message, communicationMode int, sendCallback
 	}
 
 	if d.remotingClient.getNameServerAddressList() == nil || len(d.remotingClient.getNameServerAddressList()) == 0 {
-		err = errors.New("No name server address, please set it")
+		err = errors.New("no name server address, please set it")
 	}
 	err = errors.New("No route info of this topic," + msg.Topic)
 	return
@@ -445,7 +441,7 @@ func (d *DefaultProducer) processSendResponse(brokerName string, msg *Message, r
 	var sendStatus int
 
 	if response == nil {
-		err = errors.New("response in processSendResponse is nil!")
+		err = errors.New("response in processSendResponse is nil")
 		return
 	}
 	switch response.Code {

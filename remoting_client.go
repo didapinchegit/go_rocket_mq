@@ -131,7 +131,6 @@ func (d *DefaultRemotingClient) connect(addr string) (conn net.Conn, err error) 
 }
 
 func (d *DefaultRemotingClient) invokeSync(addr string, request *RemotingCommand, timeoutMillis int64) (*RemotingCommand, error) {
-	//fmt.Println("invokeSync->", addr, request, timeoutMillis)
 	conn, ok := d.getAndCreateConn(addr)
 	var err error
 	if !ok {
@@ -156,14 +155,6 @@ func (d *DefaultRemotingClient) invokeSync(addr string, request *RemotingCommand
 	d.responseTableLock.Lock()
 	d.responseTable[request.Opaque] = response
 	d.responseTableLock.Unlock()
-
-	//fmt.Println("------------------------------------------------------------------")
-	//fmt.Println("request", string(request.Body))
-	//fmt.Println("header", string(header))
-	//fmt.Println("conn", &conn)
-	//fmt.Println("addr", addr)
-	//fmt.Println("d.responseTable", (*d).responseTable)
-	//fmt.Println("------------------------------------------------------------------")
 
 	err = d.sendRequest(header, body, conn, addr)
 	if err != nil {
