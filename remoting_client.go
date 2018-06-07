@@ -5,8 +5,10 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"github.com/golang/glog"
+	"fmt"
+	"math/rand"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
@@ -28,76 +30,113 @@ type RemotingClient interface {
 	connect(addr string) (net.Conn, error)
 	invokeAsync(addr string, request *RemotingCommand, timeoutMillis int64, invokeCallback InvokeCallback) error
 	invokeSync(addr string, request *RemotingCommand, timeoutMillis int64) (*RemotingCommand, error)
+	invokeOneway(addr string, request *RemotingCommand, timeoutMillis int64) error
 	ScanResponseTable()
+	getNameServerAddressList() []string
 }
 
-type DefalutRemotingClient struct {
-	connTable          map[string]net.Conn
-	connTableLock      sync.RWMutex
-	responseTable      map[int32]*ResponseFuture
-	responseTableLock  sync.RWMutex
-	namesrvAddrList    []string
-	namesrvAddrChoosed string
+type DefaultRemotingClient struct {
+	connTable         map[string]net.Conn
+	connTableLock     sync.RWMutex
+	responseTable     map[int32]*ResponseFuture
+	responseTableLock sync.RWMutex
+	namesrvAddrList   []string
+	namesrvAddrChosen string
 }
 
 func NewDefaultRemotingClient() RemotingClient {
-	return &DefalutRemotingClient{
-		connTable:    make(map[string]net.Conn),
-		responseTable: make(map[int32]*ResponseFuture),
+	return &DefaultRemotingClient{
+		connTable:       make(map[string]net.Conn),
+		responseTable:   make(map[int32]*ResponseFuture),
+		namesrvAddrList: make([]string, 0),
 	}
 }
 
-func (self *DefalutRemotingClient) ScanResponseTable() {
-	self.responseTableLock.Lock()
-	for seq, response := range self.responseTable {
-		if  (response.beginTimestamp + 30) <= time.Now().Unix() {
-
-			delete(self.responseTable, seq)
-
+func (d *DefaultRemotingClient) ScanResponseTable() {
+	d.responseTableLock.Lock()
+	for seq, response := range d.responseTable {
+		if (response.beginTimestamp + 30) <= time.Now().Unix() {
+			delete(d.responseTable, seq)
 			if response.invokeCallback != nil {
 				response.invokeCallback(nil)
-				glog.Warningf("remove time out request %v", response)
+				fmt.Printf("remove time out request %v", response)
 			}
 		}
 	}
-	self.responseTableLock.Unlock()
+	d.responseTableLock.Unlock()
 
 }
 
-func (self *DefalutRemotingClient) connect(addr string) (conn net.Conn, err error) {
-	if addr == "" {
-		addr = self.namesrvAddrChoosed
+func (d *DefaultRemotingClient) getAndCreateConn(addr string) (conn net.Conn, ok bool) {
+	// TODO optimize algorithm of getting a nameserver connection
+	if strings.ContainsAny(addr, ";") {
+		namesrvAddrList := strings.Split(addr, ";")
+		namesrvAddrListlen := len(namesrvAddrList)
+		namesrvAddr, namesrvAddrList := removeOne(rand.Intn(namesrvAddrListlen), namesrvAddrList)
+
+		var err error
+		for i := 0; i < namesrvAddrListlen-1; i++ {
+			conn, err = d.connect(namesrvAddr)
+			if err != nil {
+				fmt.Println("getAndCreateConn error, ", err)
+				namesrvAddr, namesrvAddrList = removeOne(rand.Intn(namesrvAddrListlen), namesrvAddrList)
+			} else {
+				d.namesrvAddrChosen = namesrvAddr
+				break
+			}
+		}
+		addr = d.namesrvAddrChosen
 	}
 
-	self.connTableLock.RLock()
-	conn, ok := self.connTable[addr]
-	self.connTableLock.RUnlock()
+	d.connTableLock.RLock()
+	conn, ok = d.connTable[addr]
+	d.connTableLock.RUnlock()
+
+	return
+}
+
+func removeOne(index int, namesrvAddrList []string) (namesrvAddr string, newNamesrvAddrList []string) {
+	namesrvAddrListlen := len(namesrvAddrList)
+	index = rand.Intn(namesrvAddrListlen)
+	namesrvAddr = namesrvAddrList[index]
+	namesrvAddrList[index] = namesrvAddrList[namesrvAddrListlen-1]
+	newNamesrvAddrList = namesrvAddrList[:namesrvAddrListlen-1]
+
+	return
+}
+
+func (d *DefaultRemotingClient) connect(addr string) (conn net.Conn, err error) {
+	if addr == "" {
+		addr = d.namesrvAddrChosen
+	}
+
+	d.connTableLock.RLock()
+	conn, ok := d.connTable[addr]
+	d.connTableLock.RUnlock()
 	if !ok {
 		conn, err = net.Dial("tcp", addr)
 		if err != nil {
-			glog.Error(err)
+			fmt.Println(err)
 			return nil, err
 		}
 
-		self.connTableLock.Lock()
-		self.connTable[addr] = conn
-		self.connTableLock.Unlock()
-		glog.Info("connect to:", addr)
-		go self.handlerConn(conn, addr)
+		d.connTableLock.Lock()
+		d.connTable[addr] = conn
+		d.connTableLock.Unlock()
+		fmt.Println("connect to:", addr)
+		go d.handlerConn(conn, addr)
 	}
 
 	return conn, nil
 }
 
-func (self *DefalutRemotingClient) invokeSync(addr string, request *RemotingCommand, timeoutMillis int64) (*RemotingCommand, error) {
-	self.connTableLock.RLock()
-	conn, ok := self.connTable[addr]
-	self.connTableLock.RUnlock()
+func (d *DefaultRemotingClient) invokeSync(addr string, request *RemotingCommand, timeoutMillis int64) (*RemotingCommand, error) {
+	conn, ok := d.getAndCreateConn(addr)
 	var err error
 	if !ok {
-		conn, err = self.connect(addr)
+		conn, err = d.connect(addr)
 		if err != nil {
-			glog.Error(err)
+			fmt.Println(err)
 			return nil, err
 		}
 	}
@@ -113,12 +152,13 @@ func (self *DefalutRemotingClient) invokeSync(addr string, request *RemotingComm
 	header := request.encodeHeader()
 	body := request.Body
 
-	self.responseTableLock.Lock()
-	self.responseTable[request.Opaque] = response
-	self.responseTableLock.Unlock()
-	err = self.sendRequest(header, body, conn, addr)
+	d.responseTableLock.Lock()
+	d.responseTable[request.Opaque] = response
+	d.responseTableLock.Unlock()
+
+	err = d.sendRequest(header, body, conn, addr)
 	if err != nil {
-		glog.Error(err)
+		fmt.Println("invokeSync:err", err)
 		return nil, err
 	}
 	select {
@@ -130,16 +170,15 @@ func (self *DefalutRemotingClient) invokeSync(addr string, request *RemotingComm
 
 }
 
-func (self *DefalutRemotingClient) invokeAsync(addr string, request *RemotingCommand, timeoutMillis int64, invokeCallback InvokeCallback) error {
-	self.connTableLock.RLock()
-	conn, ok := self.connTable[addr]
-	self.connTableLock.RUnlock()
+func (d *DefaultRemotingClient) invokeAsync(addr string, request *RemotingCommand, timeoutMillis int64, invokeCallback InvokeCallback) (err error) {
+	d.connTableLock.RLock()
+	conn, ok := d.connTable[addr]
+	d.connTableLock.RUnlock()
 
-	var err error
 	if !ok {
-		conn, err = self.connect(addr)
+		conn, err = d.connect(addr)
 		if err != nil {
-			glog.Error(err)
+			fmt.Println(err)
 			return err
 		}
 	}
@@ -152,38 +191,58 @@ func (self *DefalutRemotingClient) invokeAsync(addr string, request *RemotingCom
 		invokeCallback: invokeCallback,
 	}
 
-	self.responseTableLock.Lock()
-	self.responseTable[request.Opaque] = response
-	self.responseTableLock.Unlock()
+	d.responseTableLock.Lock()
+	d.responseTable[request.Opaque] = response
+	d.responseTableLock.Unlock()
 
 	header := request.encodeHeader()
 	body := request.Body
-	err = self.sendRequest(header, body, conn, addr)
+	err = d.sendRequest(header, body, conn, addr)
 	if err != nil {
-		glog.Error(err)
+		fmt.Println(err)
 		return err
 	}
 	return nil
 }
 
-func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
+func (d *DefaultRemotingClient) invokeOneway(addr string, request *RemotingCommand, timeoutMillis int64) (err error) {
+	d.connTableLock.RLock()
+	conn, ok := d.connTable[addr]
+	d.connTableLock.RUnlock()
+
+	if !ok {
+		conn, err = d.connect(addr)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+	}
+
+	request.markOnewayRPC()
+	header := request.encodeHeader()
+	body := request.Body
+
+	return d.sendRequest(header, body, conn, addr)
+}
+
+func (d *DefaultRemotingClient) handlerConn(conn net.Conn, addr string) {
 	b := make([]byte, 1024)
 	var length, headerLength, bodyLength int32
 	var buf = bytes.NewBuffer([]byte{})
 	var header, body []byte
-	var flag int = 0
+	var flag = 0
 	for {
 		n, err := conn.Read(b)
 		if err != nil {
-			self.releaseConn(addr, conn)
-			glog.Error(err, addr)
+			d.releaseConn(addr, conn)
+			fmt.Println(err, addr)
 
 			return
 		}
 
 		_, err = buf.Write(b[:n])
 		if err != nil {
-			self.releaseConn(addr, conn)
+			d.releaseConn(addr, conn)
 			return
 		}
 
@@ -192,7 +251,7 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 				if buf.Len() >= 4 {
 					err = binary.Read(buf, binary.BigEndian, &length)
 					if err != nil {
-						glog.Error(err)
+						fmt.Println(err)
 						return
 					}
 					flag = 1
@@ -205,7 +264,7 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 				if buf.Len() >= 4 {
 					err = binary.Read(buf, binary.BigEndian, &headerLength)
 					if err != nil {
-						glog.Error(err)
+						fmt.Println(err)
 						return
 					}
 					flag = 2
@@ -220,7 +279,7 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 					header = make([]byte, headerLength)
 					_, err = buf.Read(header)
 					if err != nil {
-						glog.Error(err)
+						fmt.Println(err)
 						return
 					}
 					flag = 3
@@ -239,7 +298,7 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 						body = make([]byte, int(bodyLength))
 						_, err = buf.Read(body)
 						if err != nil {
-							glog.Error(err)
+							fmt.Println(err)
 							return
 						}
 						flag = 0
@@ -256,13 +315,13 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 				copy(bodyCopy, body)
 				go func() {
 					cmd := decodeRemoteCommand(headerCopy, bodyCopy)
-					self.responseTableLock.RLock()
-					response, ok := self.responseTable[cmd.Opaque]
-					self.responseTableLock.RUnlock()
+					d.responseTableLock.RLock()
+					response, ok := d.responseTable[cmd.Opaque]
+					d.responseTableLock.RUnlock()
 
-					self.responseTableLock.Lock()
-					delete(self.responseTable, cmd.Opaque)
-					self.responseTableLock.Unlock()
+					d.responseTableLock.Lock()
+					delete(d.responseTable, cmd.Opaque)
+					d.responseTableLock.Unlock()
 
 					if ok {
 						response.responseCommand = cmd
@@ -274,15 +333,15 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 							response.done <- true
 						}
 					} else {
-						if cmd.Code == NOTIFY_CONSUMER_IDS_CHANGED {
+						if cmd.Code == NotifyConsumerIdsChanged {
 							return
 						}
 						jsonCmd, err := json.Marshal(cmd)
 
 						if err != nil {
-							glog.Error(err)
+							fmt.Println(err)
 						}
-						glog.Error(string(jsonCmd))
+						fmt.Println(string(jsonCmd))
 					}
 				}()
 			}
@@ -291,28 +350,28 @@ func (self *DefalutRemotingClient) handlerConn(conn net.Conn, addr string) {
 	}
 }
 
-func (self *DefalutRemotingClient) sendRequest(header, body []byte, conn net.Conn, addr string) error {
+func (d *DefaultRemotingClient) sendRequest(header, body []byte, conn net.Conn, addr string) error {
 
 	buf := bytes.NewBuffer([]byte{})
-	binary.Write(buf, binary.BigEndian, int32(len(header) + len(body) + 4))
+	binary.Write(buf, binary.BigEndian, int32(len(header)+len(body)+4))
 	binary.Write(buf, binary.BigEndian, int32(len(header)))
 	_, err := conn.Write(buf.Bytes())
 
 	if err != nil {
-		self.releaseConn(addr, conn)
+		d.releaseConn(addr, conn)
 		return err
 	}
 
 	_, err = conn.Write(header)
 	if err != nil {
-		self.releaseConn(addr, conn)
+		d.releaseConn(addr, conn)
 		return err
 	}
 
 	if body != nil && len(body) > 0 {
 		_, err = conn.Write(body)
 		if err != nil {
-			self.releaseConn(addr, conn)
+			d.releaseConn(addr, conn)
 			return err
 		}
 	}
@@ -320,9 +379,13 @@ func (self *DefalutRemotingClient) sendRequest(header, body []byte, conn net.Con
 	return nil
 }
 
-func (self *DefalutRemotingClient) releaseConn(addr string, conn net.Conn) {
+func (d *DefaultRemotingClient) releaseConn(addr string, conn net.Conn) {
 	conn.Close()
-	self.connTableLock.Lock()
-	delete(self.connTable, addr)
-	self.connTableLock.Unlock()
+	d.connTableLock.Lock()
+	delete(d.connTable, addr)
+	d.connTableLock.Unlock()
+}
+
+func (d *DefaultRemotingClient) getNameServerAddressList() []string {
+	return d.namesrvAddrList
 }

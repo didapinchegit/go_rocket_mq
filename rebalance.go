@@ -2,7 +2,7 @@ package rocketmq
 
 import (
 	"errors"
-	"github.com/golang/glog"
+	"fmt"
 	"sort"
 	"sync"
 )
@@ -19,15 +19,16 @@ type Rebalance struct {
 	groupName                    string
 	messageModel                 string
 	topicSubscribeInfoTable      map[string][]*MessageQueue
-	topicSubscribeInfoTableLock sync.RWMutex
+	topicSubscribeInfoTableLock  sync.RWMutex
 	subscriptionInner            map[string]*SubscriptionData
-	subscriptionInnerLock sync.RWMutex
+	subscriptionInnerLock        sync.RWMutex
 	mqClient                     *MqClient
 	allocateMessageQueueStrategy AllocateMessageQueueStrategy
 	consumer                     *DefaultConsumer
+	producer                     *DefaultProducer
 	processQueueTable            map[MessageQueue]int32
-	processQueueTableLock sync.RWMutex
-	mutex sync.Mutex
+	processQueueTableLock        sync.RWMutex
+	mutex                        sync.Mutex
 }
 
 func NewRebalance() *Rebalance {
@@ -40,20 +41,20 @@ func NewRebalance() *Rebalance {
 	}
 }
 
-func (self *Rebalance) doRebalance() {
-	self.mutex.Lock()
-	defer self.mutex.Unlock()
-	for topic, _ := range self.subscriptionInner {
-		self.rebalanceByTopic(topic)
+func (r *Rebalance) doRebalance() {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	for topic, _ := range r.subscriptionInner {
+		r.rebalanceByTopic(topic)
 	}
 }
 
 type ConsumerIdSorter []string
 
-func (self ConsumerIdSorter) Len() int      { return len(self) }
-func (self ConsumerIdSorter) Swap(i, j int) { self[i], self[j] = self[j], self[i] }
-func (self ConsumerIdSorter) Less(i, j int) bool {
-	if self[i] < self[j] {
+func (r ConsumerIdSorter) Len() int      { return len(r) }
+func (r ConsumerIdSorter) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+func (r ConsumerIdSorter) Less(i, j int) bool {
+	if r[i] < r[j] {
 		return true
 	}
 	return false
@@ -64,7 +65,7 @@ type AllocateMessageQueueStrategy interface {
 }
 type AllocateMessageQueueAveragely struct{}
 
-func (self *AllocateMessageQueueAveragely) allocate(consumerGroup string, currentCID string, mqAll []*MessageQueue, cidAll []string) ([]*MessageQueue, error) {
+func (r *AllocateMessageQueueAveragely) allocate(consumerGroup string, currentCID string, mqAll []*MessageQueue, cidAll []string) ([]*MessageQueue, error) {
 	if currentCID == "" {
 		return nil, errors.New("currentCID is empty")
 	}
@@ -119,16 +120,16 @@ func (self *AllocateMessageQueueAveragely) allocate(consumerGroup string, curren
 	return nil, errors.New("cant't find currentCID")
 }
 
-func (self *Rebalance) rebalanceByTopic(topic string) error {
-	cidAll, err := self.mqClient.findConsumerIdList(topic, self.groupName)
+func (r *Rebalance) rebalanceByTopic(topic string) error {
+	cidAll, err := r.mqClient.findConsumerIdList(topic, r.groupName)
 	if err != nil {
-		glog.Error(err)
+		fmt.Println(err)
 		return err
 	}
 
-	self.topicSubscribeInfoTableLock.RLock()
-	mqs, ok := self.topicSubscribeInfoTable[topic]
-	self.topicSubscribeInfoTableLock.RUnlock()
+	r.topicSubscribeInfoTableLock.RLock()
+	mqs, ok := r.topicSubscribeInfoTable[topic]
+	r.topicSubscribeInfoTableLock.RUnlock()
 	if ok && len(mqs) > 0 && len(cidAll) > 0 {
 		var messageQueues MessageQueues = mqs
 		var consumerIdSorter ConsumerIdSorter = cidAll
@@ -137,40 +138,40 @@ func (self *Rebalance) rebalanceByTopic(topic string) error {
 		sort.Sort(consumerIdSorter)
 	}
 
-	allocateResult, err := self.allocateMessageQueueStrategy.allocate(self.groupName, self.mqClient.clientId, mqs, cidAll)
+	allocateResult, err := r.allocateMessageQueueStrategy.allocate(r.groupName, r.mqClient.clientId, mqs, cidAll)
 
 	if err != nil {
-		glog.Error(err)
+		fmt.Println(err)
 		return err
 	}
 
-	glog.V(1).Infof("rebalance topic[%s]", topic)
-	self.updateProcessQueueTableInRebalance(topic, allocateResult)
+	fmt.Printf("rebalance topic[%s]\n", topic)
+	r.updateProcessQueueTableInRebalance(topic, allocateResult)
 	return nil
 }
 
-func (self *Rebalance) updateProcessQueueTableInRebalance(topic string, mqSet []*MessageQueue) {
+func (r *Rebalance) updateProcessQueueTableInRebalance(topic string, mqSet []*MessageQueue) {
 	for _, mq := range mqSet {
-		self.processQueueTableLock.RLock()
-		_, ok := self.processQueueTable[*mq]
-		self.processQueueTableLock.RUnlock()
+		r.processQueueTableLock.RLock()
+		_, ok := r.processQueueTable[*mq]
+		r.processQueueTableLock.RUnlock()
 		if !ok {
 			pullRequest := new(PullRequest)
-			pullRequest.consumerGroup = self.groupName
+			pullRequest.consumerGroup = r.groupName
 			pullRequest.messageQueue = mq
-			pullRequest.nextOffset = self.computePullFromWhere(mq)
-			self.mqClient.pullMessageService.pullRequestQueue <- pullRequest
-			self.processQueueTableLock.Lock()
-			self.processQueueTable[*mq] = 1
-			self.processQueueTableLock.Unlock()
+			pullRequest.nextOffset = r.computePullFromWhere(mq)
+			r.mqClient.pullMessageService.pullRequestQueue <- pullRequest
+			r.processQueueTableLock.Lock()
+			r.processQueueTable[*mq] = 1
+			r.processQueueTableLock.Unlock()
 		}
 	}
 
 }
 
-func (self *Rebalance) computePullFromWhere(mq *MessageQueue) int64 {
+func (r *Rebalance) computePullFromWhere(mq *MessageQueue) int64 {
 	var result int64 = -1
-	lastOffset := self.consumer.offsetStore.readOffset(mq, READ_FROM_STORE)
+	lastOffset := r.consumer.offsetStore.readOffset(mq, ReadFromStore)
 
 	if lastOffset >= 0 {
 		result = lastOffset
